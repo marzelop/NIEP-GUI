@@ -1,0 +1,7 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource>
+    <file alias="cursor.png">resources/cursor.png</file>
+    <file alias="line.png">resources/line.png</file>
+    <file alias="palm-of-hand.png">resources/palm-of-hand.png</file>
+</qresource>
+</RCC>
