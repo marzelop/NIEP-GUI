@@ -6,16 +6,26 @@ if [ $# -gt 0 ]
 then
 	if [ $# -gt 1 ]
 	then
-		echo "Muitos argumentos."
-		echo "Uso: ./install.sh [venv_path]"
+		echo "Too many arguments."
+		echo "Usage: ./install.sh [venv_path]"
 		exit 1
 	fi
 	VENV="$1"
 fi
 
-if [ -n $VENV ]
+if [ ! -z $VENV ]
 then
-	echo "Instalando no ambiente $VENV"
+	echo "Installing in the enviroment $VENV"
+	if [ ! -f "$VENV/bin/activate" ]
+	then
+		echo "Creating virtual enviroment $VENV"
+		python -m venv $VENV
+		if [ $? -ne 0 ]
+		then
+			echo "Error on creating virtual enviroment. Aborting."
+			exit 2
+		fi
+	fi
 	source "$VENV"/bin/activate
 fi
 
@@ -24,3 +34,7 @@ for DEP in ${PIP_DEP[@]}
 do
 	pip install $DEP
 done
+
+echo "Generating resources.py"
+./gen_resources.sh
+echo "Finished."
