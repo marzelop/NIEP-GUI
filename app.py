@@ -62,7 +62,8 @@ class WindowClass(QMainWindow):
 		actions = {
 			"&Select": (self.testf, ":cursor.png"),
 			"&Move": (self.testf, ":palm-of-hand.png"),
-			"&Connect": (self.testf, ":line.png")
+			"&Connect": (self.testf, ":line.png"),
+			"&New": (self.testf, ":add.png")
 		}
 		for action in actions.keys():
 			self.editActions.append(QAction(QIcon(actions[action][ICON_PATH]), action))
