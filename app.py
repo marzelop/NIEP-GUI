@@ -21,11 +21,8 @@ class WindowClass(QMainWindow):
 		self.setWindowTitle("NIEP GUI")
 		self.mainWidget = MainWidget()
 		self.menuBar = self.createMenuBar()
-		#self.addToolBar(TopMenu())
 		self.edittoolbar = self.createToolBar()
 		self.addToolBar(self.edittoolbar)
-		print(self.edittoolbar.actions())
-
 
 		self.setMenuBar(self.menuBar)
 		self.setCentralWidget(self.mainWidget)
