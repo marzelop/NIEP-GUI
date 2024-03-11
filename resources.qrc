@@ -3,5 +3,7 @@
     <file alias="cursor.png">resources/cursor.png</file>
     <file alias="line.png">resources/line.png</file>
     <file alias="palm-of-hand.png">resources/palm-of-hand.png</file>
+    <file alias="add.png">resources/add.png</file>
 </qresource>
 </RCC>
+  

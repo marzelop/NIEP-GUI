@@ -35,6 +35,6 @@ do
 	pip install $DEP
 done
 
-echo "Generating resources.py"
+echo "Generating qrc_resources.py"
 ./gen_resources.sh
 echo "Finished."

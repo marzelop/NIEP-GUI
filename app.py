@@ -1,6 +1,6 @@
 #!./venv/bin/python
 from PySide6.QtCore import Qt, QLine, QPointF
-from PySide6.QtGui import QFont, QPainter, QColor, QPen, QPainterPath, QAction
+from PySide6.QtGui import QFont, QPainter, QColor, QPen, QPainterPath, QAction, QIcon
 from PySide6.QtWidgets import (
 	QLabel, QMainWindow, QApplication, QWidget,
 	QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout,
@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 import networkx as nx
 import network as net
 import random
+import resources_rc
 
 rad = 5
 
@@ -20,6 +21,11 @@ class WindowClass(QMainWindow):
 		self.setWindowTitle("NIEP GUI")
 		self.mainWidget = MainWidget()
 		self.menuBar = self.createMenuBar()
+		#self.addToolBar(TopMenu())
+		self.edittoolbar = self.createToolBar()
+		self.addToolBar(self.edittoolbar)
+		print(self.edittoolbar.actions())
+
 
 		self.setMenuBar(self.menuBar)
 		self.setCentralWidget(self.mainWidget)
@@ -48,28 +54,50 @@ class WindowClass(QMainWindow):
 			menuBar.addMenu(newmenu)
 
 		return menuBar
+	
+	def createToolBar(self):
+		self.editActions = []
+		toolbar = QToolBar("Edit")
+		ICON_PATH = 1
+		actions = {
+			"&Select": (self.testf, ":cursor.png"),
+			"&Move": (self.testf, ":palm-of-hand.png"),
+			"&Connect": (self.testf, ":line.png")
+		}
+		for action in actions.keys():
+			print("Atumalaca")
+			self.editActions.append(QAction(QIcon(actions[action][ICON_PATH]), action))
+			print(self.editActions)
+			#newAction = QAction(action)
+
+		toolbar.addActions(self.editActions)
+		return toolbar
+
+	def testf(self):
+		print(self.sender().text())
 
 
 class MainWidget(QWidget):
 	def __init__(self):
 		super(MainWidget, self).__init__()
 		layout = QVBoxLayout()
-		layout.addWidget(TopMenu())
 		layout.addWidget(EVWrapper())
 		self.setLayout(layout)
 
 
 class TopMenu(QToolBar):
 	def __init__(self):
-		super(TopMenu, self).__init__()
+		super(TopMenu, self).__init__("Edit")
+		ICON_PATH = 1
 		actions = {
-			"&Test1": self.testf,
-			"&Test2": self.testf,
-			"&Test3": self.testf
+			"&Select": (self.testf, ":cursor.png"),
+			"&Move": (self.testf, ":palm-of-hand.png"),
+			"&Connect": (self.testf, ":line.png")
 		}
-		
 		for action in actions.keys():
-			newAction = QAction(action)
+			newAction = QAction(QIcon(actions[action][ICON_PATH]), action)
+			#newAction = QAction(action)
+
 			self.addAction(newAction)
 
 	def testf(self):
