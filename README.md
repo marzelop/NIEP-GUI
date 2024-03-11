@@ -21,7 +21,7 @@ If you have a virtual enviroment on the path `./venv/`, you could also run the a
 The application was built using Python 3.10.12 using the Qt framework with the [PySide6](https://pypi.org/project/PySide6/) library to create the GUI. Also, the [NetworkX](https://networkx.org/) library was used to create and manipulate network graphs.
 
 ## Icons Used:
-[Cursor icons created by Freepik - Flaticon](https://www.flaticon.com/free-icons/cursor)
-[Stop icons created by Freepik - Flaticon](https://www.flaticon.com/free-icons/stop)
-[Straight icons created by Flipicon - Flaticon](https://www.flaticon.com/free-icons/straight)
-[Plus icons created by srip - Flaticon](https://www.flaticon.com/free-icons/plus)
+[Cursor icons created by Freepik - Flaticon](https://www.flaticon.com/free-icons/cursor)\
+[Stop icons created by Freepik - Flaticon](https://www.flaticon.com/free-icons/stop)\
+[Straight icons created by Flipicon - Flaticon](https://www.flaticon.com/free-icons/straight)\
+[Plus icons created by srip - Flaticon](https://www.flaticon.com/free-icons/plus)\
