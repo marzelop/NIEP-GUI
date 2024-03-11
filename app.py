@@ -65,10 +65,7 @@ class WindowClass(QMainWindow):
 			"&Connect": (self.testf, ":line.png")
 		}
 		for action in actions.keys():
-			print("Atumalaca")
 			self.editActions.append(QAction(QIcon(actions[action][ICON_PATH]), action))
-			print(self.editActions)
-			#newAction = QAction(action)
 
 		toolbar.addActions(self.editActions)
 		return toolbar
