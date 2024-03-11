@@ -80,25 +80,6 @@ class MainWidget(QWidget):
 		layout = QVBoxLayout()
 		layout.addWidget(EVWrapper())
 		self.setLayout(layout)
-
-
-class TopMenu(QToolBar):
-	def __init__(self):
-		super(TopMenu, self).__init__("Edit")
-		ICON_PATH = 1
-		actions = {
-			"&Select": (self.testf, ":cursor.png"),
-			"&Move": (self.testf, ":palm-of-hand.png"),
-			"&Connect": (self.testf, ":line.png")
-		}
-		for action in actions.keys():
-			newAction = QAction(QIcon(actions[action][ICON_PATH]), action)
-			#newAction = QAction(action)
-
-			self.addAction(newAction)
-
-	def testf(self):
-		print(self.sender().text())
 		
 
 class EVWrapper(QWidget):
