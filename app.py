@@ -6,7 +6,8 @@ from PySide6.QtWidgets import (
 	QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout,
 	QGraphicsView, QGraphicsScene, QGraphicsEllipseItem,
 	QGraphicsItem, QGraphicsPathItem, QListWidget,
-	QListWidgetItem, QMenuBar, QMenu, QToolBar
+	QListWidgetItem, QMenuBar, QMenu, QToolBar,
+	QGraphicsItemGroup, QGraphicsTextItem
 )
 import networkx as nx
 import network as net
@@ -14,6 +15,7 @@ import random
 import resources_rc
 
 rad = 5
+NODE_RAD = 50
 
 class WindowClass(QMainWindow):
 	def __init__(self):
@@ -21,8 +23,8 @@ class WindowClass(QMainWindow):
 		self.setWindowTitle("NIEP GUI")
 		self.mainWidget = MainWidget()
 		self.menuBar = self.createMenuBar()
-		self.edittoolbar = self.createToolBar()
-		self.addToolBar(self.edittoolbar)
+		self.editToolbar = self.createEditToolBar()
+		self.addToolBar(self.editToolbar)
 
 		self.setMenuBar(self.menuBar)
 		self.setCentralWidget(self.mainWidget)
@@ -52,7 +54,7 @@ class WindowClass(QMainWindow):
 
 		return menuBar
 	
-	def createToolBar(self):
+	def createEditToolBar(self):
 		self.editActions = []
 		toolbar = QToolBar("Edit")
 		ICON_PATH = 1
@@ -121,7 +123,7 @@ class SceneClass(QGraphicsScene):
 	def __init__(self, id=None):
 		super(SceneClass, self).__init__()
 		self.setSceneRect(-500, -500, 1000, 1000)
-		self.grid = 25
+		self.grid = 40
 		self.it = None
 		self.node = None
 
@@ -130,7 +132,7 @@ class SceneClass(QGraphicsScene):
 			painter = QPainter()
 			rect = QRect()
 
-		painter.fillRect(rect, QColor(30, 30, 30))
+		painter.fillRect(rect, QColor(210, 210, 210))
 		left = int(rect.left()) - int((rect.left()) % self.grid)
 		top = int(rect.top()) - int((rect.top()) % self.grid)
 		right = int(rect.right())
@@ -140,34 +142,57 @@ class SceneClass(QGraphicsScene):
 			lines.append(QLine(x, top, x, bottom))
 		for y in range(top, bottom, self.grid):
 			lines.append(QLine(left, y, right, y))
-		painter.setPen(QPen(QColor(50, 50, 50)))
+		painter.setPen(QPen(QColor(150, 150, 150)))
 		painter.drawLines(lines)
 
 	def mousePressEvent(self, event):
 		if event.button() == Qt.RightButton:
-			path = QPainterPath()
-			path.moveTo(event.scenePos() + QPointF(random.randint(-100, 100), random.randint(-100, 100)))
-			path.lineTo(event.scenePos())
-			self.addItem(Path(path, self))
+			# path = QPainterPath()
+			# path.moveTo(event.scenePos() + QPointF(random.randint(-100, 100), random.randint(-100, 100)))
+			# path.lineTo(event.scenePos())
+			# self.addItem(Path(path, self))
+
+			node = Node("Teste", {})
+			node.setPos(event.scenePos())
+			self.addItem(node)
 		super(SceneClass, self).mousePressEvent(event)
 
+# class Node(QGraphicsEllipseItem):
+# 	def __init__(self, path, index):
+# 		super(Node, self).__init__(-rad, -rad, 2*rad, 2*rad)
+# 
+# 		self.rad = rad
+# 		self.path = path
+# 		self.index = index
+# 
+# 		self.setZValue(1)
+# 		self.setFlag(QGraphicsItem.ItemIsMovable)
+# 		self.setFlag(QGraphicsItem.ItemSendsGeometryChanges)
+# 		self.setBrush(Qt.green)
+# 
+# 	def itemChange(self, change, value):
+# 		if change == QGraphicsItem.ItemPositionChange:
+# 			self.path.updateElement(self.index, value)
+# 		return QGraphicsEllipseItem.itemChange(self, change, value)
+
+
 class Node(QGraphicsEllipseItem):
-	def __init__(self, path, index):
-		super(Node, self).__init__(-rad, -rad, 2*rad, 2*rad)
+	def __init__(self, id: str, nodeInfo: dict):
+		# Using -NODE_RAD for the x and y of the bounding rectangle aligns the rectangle at the center of the node
+		super(Node, self).__init__(-NODE_RAD, -NODE_RAD, 2*NODE_RAD, 2*NODE_RAD)
 
-		self.rad = rad
-		self.path = path
-		self.index = index
+		# Instantiate the text object and centers it within the ellipse
+		self.text = QGraphicsTextItem(id, parent=self)
+		self.text.setX(-self.text.boundingRect().width()/2)
+		self.text.setY(-self.text.boundingRect().height()/2)
 
-		self.setZValue(1)
+		self.nodeInfo = nodeInfo
+		self.edges = []
+		
 		self.setFlag(QGraphicsItem.ItemIsMovable)
-		self.setFlag(QGraphicsItem.ItemSendsGeometryChanges)
-		self.setBrush(Qt.green)
-
-	def itemChange(self, change, value):
-		if change == QGraphicsItem.ItemPositionChange:
-			self.path.updateElement(self.index, value)
-		return QGraphicsEllipseItem.itemChange(self, change, value)
+		self.setFlag(QGraphicsItem.ItemIsSelectable)
+		self.setZValue(1)
+		self.setBrush(QColor(35, 158, 207))
 
 
 class Path(QGraphicsPathItem):
