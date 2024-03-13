@@ -1,5 +1,5 @@
 #!./venv/bin/python
-from PySide6.QtCore import Qt, QLine, QPointF
+from PySide6.QtCore import Qt, QLine, QPointF, QLineF
 from PySide6.QtGui import QFont, QPainter, QColor, QPen, QPainterPath, QAction, QIcon
 from PySide6.QtWidgets import (
 	QLabel, QMainWindow, QApplication, QWidget,
@@ -7,7 +7,8 @@ from PySide6.QtWidgets import (
 	QGraphicsView, QGraphicsScene, QGraphicsEllipseItem,
 	QGraphicsItem, QGraphicsPathItem, QListWidget,
 	QListWidgetItem, QMenuBar, QMenu, QToolBar,
-	QGraphicsItemGroup, QGraphicsTextItem
+	QGraphicsItemGroup, QGraphicsTextItem,
+	QGraphicsLineItem
 )
 import networkx as nx
 import network as net
@@ -204,6 +205,15 @@ class Node(QGraphicsEllipseItem):
 		self.setFlag(QGraphicsItem.ItemIsSelectable)
 		self.setZValue(-1)
 		self.setBrush(QColor(35, 158, 207))
+	
+
+class Edge(QGraphicsLineItem):
+	def __init__(self, u: Node, v: Node):
+		super(Edge, self).__init__(QLineF(u.pos()), v.pos())
+		self.nodes = tuple(u, v)
+	
+	def updateLine(self):
+		self.setLine(QLineF(self.nodes[0].pos()), self.nodes[1].pos())
 
 
 class Path(QGraphicsPathItem):
