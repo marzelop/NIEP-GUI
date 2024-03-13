@@ -1,4 +1,5 @@
 #!./venv/bin/python
+from __future__ import annotations
 from PySide6.QtCore import Qt, QLine, QPointF, QLineF
 from PySide6.QtGui import QFont, QPainter, QColor, QPen, QPainterPath, QAction, QIcon
 from PySide6.QtWidgets import (
@@ -17,6 +18,7 @@ import resources_rc
 
 rad = 5
 NODE_RAD = 45
+netgraph = nx.Graph()
 
 class WindowClass(QMainWindow):
 	def __init__(self):
@@ -160,9 +162,14 @@ class SceneClass(QGraphicsScene):
 			# path.lineTo(event.scenePos())
 			# self.addItem(Path(path, self))
 
-			node = Node("Servidor1", {})
+			node = Node("Servidor1")
 			node.setPos(event.scenePos())
 			self.addItem(node)
+			node2 = Node("Servidor2")
+			node2.setPos(event.scenePos() + QPointF(100, 100))
+			self.addItem(node2)
+			edge = Edge(node, node2)
+			self.addItem(edge)
 		super(SceneClass, self).mousePressEvent(event)
 
 # class Node(QGraphicsEllipseItem):
@@ -185,7 +192,7 @@ class SceneClass(QGraphicsScene):
 
 
 class Node(QGraphicsEllipseItem):
-	def __init__(self, id: str, nodeInfo: dict):
+	def __init__(self, id: str, nodeInfo: dict = {}):
 		# Using -NODE_RAD for the x and y of the bounding rectangle aligns the rectangle at the center of the node
 		super(Node, self).__init__(-NODE_RAD, -NODE_RAD, 2*NODE_RAD, 2*NODE_RAD)
 
@@ -197,20 +204,31 @@ class Node(QGraphicsEllipseItem):
 		self.text.setX(-self.text.boundingRect().width()/2)
 		self.text.setY(-self.text.boundingRect().height()/2)
 		
-
-		self.nodeInfo = nodeInfo
-		self.edges = []
+		self.edges = list[Edge]
 		
 		self.setFlag(QGraphicsItem.ItemIsMovable)
 		self.setFlag(QGraphicsItem.ItemIsSelectable)
 		self.setZValue(-1)
 		self.setBrush(QColor(35, 158, 207))
+		netgraph.add_node(id, obj=self, info=nodeInfo)
+	
+	def getName(self) -> str:
+		return self.text.toPlainText()
+
+	def connectTo(self, node: Node):
+		self.edges += Edge(self, node)
 	
 
 class Edge(QGraphicsLineItem):
-	def __init__(self, u: Node, v: Node):
-		super(Edge, self).__init__(QLineF(u.pos()), v.pos())
-		self.nodes = tuple(u, v)
+	def __init__(self, u: Node, v: Node, edgeInfo: dict = {}):
+		super(Edge, self).__init__(QLineF(u.pos(), v.pos()))
+		netgraph.add_edge(u, v, obj=self, info=edgeInfo)
+		self.nodes = (u, v)
+		pen = QPen()
+		pen.setWidth(3)
+		self.setPen(pen)
+
+		self.setZValue(0.5)
 	
 	def updateLine(self):
 		self.setLine(QLineF(self.nodes[0].pos()), self.nodes[1].pos())
