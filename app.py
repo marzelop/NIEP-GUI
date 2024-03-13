@@ -15,7 +15,7 @@ import random
 import resources_rc
 
 rad = 5
-NODE_RAD = 50
+NODE_RAD = 45
 
 class WindowClass(QMainWindow):
 	def __init__(self):
@@ -117,6 +117,13 @@ class ViewClass(QGraphicsView):
 		self.s = SceneClass()
 		self.setScene(self.s)
 		self.setRenderHint(QPainter.Antialiasing)
+	
+	def zoom(self, angleDelta: int, center: QPointF):
+		if (angleDelta < 0):
+			factor = 1/(1.0 + abs(angleDelta)*0.008)
+		else: factor = (1.0 + angleDelta*0.008)
+		self.centerOn(center)
+		self.scale(factor, factor)
 
 
 class SceneClass(QGraphicsScene):
@@ -152,7 +159,7 @@ class SceneClass(QGraphicsScene):
 			# path.lineTo(event.scenePos())
 			# self.addItem(Path(path, self))
 
-			node = Node("Teste", {})
+			node = Node("Servidor1", {})
 			node.setPos(event.scenePos())
 			self.addItem(node)
 		super(SceneClass, self).mousePressEvent(event)
@@ -181,17 +188,21 @@ class Node(QGraphicsEllipseItem):
 		# Using -NODE_RAD for the x and y of the bounding rectangle aligns the rectangle at the center of the node
 		super(Node, self).__init__(-NODE_RAD, -NODE_RAD, 2*NODE_RAD, 2*NODE_RAD)
 
-		# Instantiate the text object and centers it within the ellipse
+		# Instantiate the text object
 		self.text = QGraphicsTextItem(id, parent=self)
+		# Set max text width to 90% of node diameter
+		self.text.setTextWidth(min(0.9*2*NODE_RAD, self.text.boundingRect().width())) 
+		# Centers it within the ellipse
 		self.text.setX(-self.text.boundingRect().width()/2)
 		self.text.setY(-self.text.boundingRect().height()/2)
+		
 
 		self.nodeInfo = nodeInfo
 		self.edges = []
 		
 		self.setFlag(QGraphicsItem.ItemIsMovable)
 		self.setFlag(QGraphicsItem.ItemIsSelectable)
-		self.setZValue(1)
+		self.setZValue(-1)
 		self.setBrush(QColor(35, 158, 207))
 
 
