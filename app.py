@@ -162,10 +162,10 @@ class SceneClass(QGraphicsScene):
 			# path.lineTo(event.scenePos())
 			# self.addItem(Path(path, self))
 
-			node = Node("Servidor1")
+			node = Node("Cliente1")
 			node.setPos(event.scenePos())
 			self.addItem(node)
-			node2 = Node("Servidor2")
+			node2 = Node("Servidor1")
 			node2.setPos(event.scenePos() + QPointF(100, 100))
 			self.addItem(node2)
 			edge = Edge(node, node2)
@@ -194,6 +194,7 @@ class SceneClass(QGraphicsScene):
 class Node(QGraphicsEllipseItem):
 	def __init__(self, id: str, nodeInfo: dict = {}):
 		# Using -NODE_RAD for the x and y of the bounding rectangle aligns the rectangle at the center of the node
+		self.i = 0
 		super(Node, self).__init__(-NODE_RAD, -NODE_RAD, 2*NODE_RAD, 2*NODE_RAD)
 
 		# Instantiate the text object
@@ -206,6 +207,7 @@ class Node(QGraphicsEllipseItem):
 		
 		self.edges = list[Edge]
 		
+		
 		self.setFlag(QGraphicsItem.ItemIsMovable)
 		self.setFlag(QGraphicsItem.ItemIsSelectable)
 		self.setZValue(-1)
@@ -217,6 +219,15 @@ class Node(QGraphicsEllipseItem):
 
 	def connectTo(self, node: Node):
 		self.edges += Edge(self, node)
+
+	def itemChange(self, change, value):
+		print(self.i)
+		self.i+=1
+		if change == QGraphicsItem.ItemPositionChange:
+			print(self.edges)
+			for edge in self.edges:
+				edge.updateLine()
+		return super().itemChange(change, value)
 	
 
 class Edge(QGraphicsLineItem):
