@@ -24,6 +24,8 @@ class WindowClass(QMainWindow):
 		super(WindowClass, self).__init__()
 		self.setWindowTitle("NIEP GUI")
 		self.mainWidget = MainWidget()
+		self.editMenu = self.mainWidget.editMenu
+		self.view = self.mainWidget.view
 		self.menuBar = self.createMenuBar()
 		self.editToolbar = self.createEditToolBar()
 		self.addToolBar(self.editToolbar)
@@ -79,20 +81,11 @@ class WindowClass(QMainWindow):
 class MainWidget(QWidget):
 	def __init__(self):
 		super(MainWidget, self).__init__()
-		layout = QVBoxLayout()
-		layout.addWidget(EVWrapper())
-		self.setLayout(layout)
-		
-
-class EVWrapper(QWidget):
-	'''
-	Class to encapsulate the EditMenu and ViewClass into one widget.
-	'''
-	def __init__(self):
-		super(EVWrapper, self).__init__()
+		self.editMenu = EditMenu()
+		self.view = ViewClass()
 		layout = QHBoxLayout()
-		layout.addWidget(EditMenu())
-		layout.addWidget(ViewClass())
+		layout.addWidget(self.editMenu)
+		layout.addWidget(self.view)
 		self.setLayout(layout)
 
 
