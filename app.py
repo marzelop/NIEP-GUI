@@ -3,7 +3,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, QLine, QPointF, QLineF
 from PySide6.QtGui import QFont, QPainter, QColor, QPen, QPainterPath, QAction, QIcon
 from PySide6.QtWidgets import (
-	QLabel, QMainWindow, QApplication, QWidget,
+	QGraphicsSceneMouseEvent, QLabel, QMainWindow, QApplication, QWidget,
 	QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout,
 	QGraphicsView, QGraphicsScene, QGraphicsEllipseItem,
 	QGraphicsItem, QGraphicsPathItem, QListWidget,
@@ -149,29 +149,29 @@ class SceneClass(QGraphicsScene):
 		painter.setPen(QPen(QColor(150, 150, 150)))
 		painter.drawLines(lines)
 
-	def mousePressEvent(self, event):
+	def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
 		if event.button() == Qt.RightButton:
-			node = Node("Cliente1")
-			node.setPos(event.scenePos())
-			self.addItem(node)
-			node2 = Node("Servidor1")
-			node2.setPos(event.scenePos() + QPointF(100, 100))
-			self.addItem(node2)
-			edge = Edge(node, node2)
-			self.addItem(edge)
+			node = self.addNode("Cliente", event.scenePos())
+			node2 = self.addNode("Servidor", event.scenePos() + QPointF(100, 100))
+			edge = self.connectNodes(node, node2)
 		super(SceneClass, self).mousePressEvent(event)
 	
-	def createNode(self, id: str, nodeInfo: dict = {}):
+	def addNode(self, id: str, position: QPointF, nodeInfo: dict = {}) -> Node:
 		node = Node(id, nodeInfo)
 		self.netgraph.add_node(id, obj=node, info=nodeInfo)
+		node.setPos(position)
 		self.addItem(node)
+
+		return node
 	
-	def connectNodes(self, u: Node, v: Node, edgeInfo={}):
+	def connectNodes(self, u: Node, v: Node, edgeInfo={}) -> Edge:
 		edge = Edge(u, v)
 		self.netgraph.add_edge(u, v, obj=self, info=edgeInfo)
-		u.edges.append(edge)
-		v.edges.append(edge)
+		u.addEdge(edge)
+		v.addEdge(edge)
 		self.addItem(edge)
+
+		return edge
 
 
 class Node(QGraphicsEllipseItem):
@@ -197,6 +197,14 @@ class Node(QGraphicsEllipseItem):
 	
 	def getName(self) -> str:
 		return self.text.toPlainText()
+	
+	def addEdge(self, edge: Edge) -> None:
+		self.edges.append(edge)
+	
+	def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent) -> None:
+		for edge in self.edges:
+			edge.updateLine()
+		return super().mouseMoveEvent(event)
 
 	
 
@@ -211,7 +219,7 @@ class Edge(QGraphicsLineItem):
 		self.setZValue(0.5)
 	
 	def updateLine(self):
-		self.setLine(QLineF(self.nodes[0].pos()), self.nodes[1].pos())
+		self.setLine(QLineF(self.nodes[0].pos(), self.nodes[1].pos()))
 
 
 class Path(QGraphicsPathItem):
