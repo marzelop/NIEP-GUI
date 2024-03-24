@@ -66,23 +66,25 @@ class WindowClass(QMainWindow):
 		return menuBar
 	
 	def createEditToolBar(self):
-		self.editActions = []
+		self.editActions: list[QAction] = []
 		toolbar = QToolBar("Edit")
+		FUNCTION = 0
 		ICON_PATH = 1
 		actions = {
-			"&Select": (self.testf, ":cursor.png"),
-			"&Move": (self.testf, ":palm-of-hand.png"),
-			"&Connect": (self.testf, ":line.png"),
-			"&New": (self.testf, ":add.png")
+			"&Select": (lambda: self.setToolMode(ToolMode.SELECT), ":cursor.png"),
+			"&Move": (lambda: self.setToolMode(ToolMode.MOVE), ":palm-of-hand.png"),
+			"&Connect": (lambda: self.setToolMode(ToolMode.CONNECT), ":line.png"),
+			"&New": (lambda: self.setToolMode(ToolMode.NEW), ":add.png")
 		}
 		for action in actions.keys():
 			self.editActions.append(QAction(QIcon(actions[action][ICON_PATH]), action))
+			self.editActions[-1].triggered.connect(actions[action][FUNCTION]) 
 
 		toolbar.addActions(self.editActions)
 		return toolbar
-
-	def testf(self):
-		print(self.sender().text())
+	
+	def setToolMode(self, toolMode: ToolMode) -> None:
+		self.view.scene.toolMode = toolMode
 
 
 class MainWidget(QWidget):
@@ -114,8 +116,8 @@ class ViewClass(QGraphicsView):
 
 		self.setDragMode(QGraphicsView.RubberBandDrag)
 
-		self.s = SceneClass()
-		self.setScene(self.s)
+		self.scene = SceneClass()
+		self.setScene(self.scene)
 		self.setRenderHint(QPainter.Antialiasing)
 	
 	def zoom(self, angleDelta: int, center: QPointF):
@@ -131,6 +133,7 @@ class SceneClass(QGraphicsScene):
 		super(SceneClass, self).__init__()
 		self.setSceneRect(-500, -500, 1000, 1000)
 		self.grid = 40
+		self.toolMode = ToolMode.SELECT
 		self.netgraph = nx.Graph()
 
 	def drawBackground(self, painter, rect):
@@ -148,6 +151,7 @@ class SceneClass(QGraphicsScene):
 		painter.drawLines(lines)
 
 	def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
+		print(self.toolMode.name)
 		if event.button() == Qt.RightButton:
 			node = self.addNode("Cliente", event.scenePos())
 			node2 = self.addNode("Servidor", event.scenePos() + QPointF(100, 100))
