@@ -177,7 +177,9 @@ class SceneClass(QGraphicsScene):
 		super(SceneClass, self).mousePressEvent(event)
 		currSel = list(filter(lambda i: type(i) == Node, self.selectedItems()))
 		if self.toolMode == ToolMode.CONNECT and len(prevSel) > 0 and len(currSel) > 0:
-			self.connectNodes(prevSel[0], currSel[0])
+			u, v = prevSel[0], currSel[0]
+			if u != v:
+				self.connectNodes(prevSel[0], currSel[0])
 	
 	def selectItemAtCursor(self, event: QGraphicsSceneMouseEvent) -> None:
 		items = self.items(event.scenePos())
@@ -220,8 +222,12 @@ class SceneClass(QGraphicsScene):
 		self.addNode(self.getNodeName("Host"), event.scenePos())
 
 	def connectNodes(self, u: Node, v: Node, edgeInfo={}) -> Edge:
+		if self.netgraph.has_edge(u.getName(), v.getName()):
+			return None
 		edge = Edge(u, v)
-		self.netgraph.add_edge(u, v, obj=self, info=edgeInfo)
+		self.netgraph.add_edge(u.getName(), v.getName(), obj=self, info=edgeInfo)
+		print(self.netgraph.nodes)
+		print(self.netgraph.edges)
 		u.addEdge(edge)
 		v.addEdge(edge)
 		self.addItem(edge)
