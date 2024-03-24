@@ -18,7 +18,6 @@ import resources_rc
 
 rad = 5
 NODE_RAD = 45
-netgraph = nx.Graph()
 
 class WindowClass(QMainWindow):
 	def __init__(self):
@@ -136,6 +135,7 @@ class SceneClass(QGraphicsScene):
 		self.grid = 40
 		self.it = None
 		self.node = None
+		self.netgraph = nx.Graph()
 
 	def drawBackground(self, painter, rect):
 		if False:
@@ -171,6 +171,18 @@ class SceneClass(QGraphicsScene):
 			edge = Edge(node, node2)
 			self.addItem(edge)
 		super(SceneClass, self).mousePressEvent(event)
+	
+	def createNode(self, id: str, nodeInfo: dict = {}):
+		node = Node(id, nodeInfo)
+		self.netgraph.add_node(id, obj=node, info=nodeInfo)
+		self.addItem(node)
+	
+	def connectNodes(self, u: Node, v: Node, edgeInfo={}):
+		edge = Edge(u, v)
+		self.netgraph.add_edge(u, v, obj=self, info=edgeInfo)
+		u.edges.append(edge)
+		v.edges.append(edge)
+		self.addItem(edge)
 
 # class Node(QGraphicsEllipseItem):
 # 	def __init__(self, path, index):
@@ -205,14 +217,12 @@ class Node(QGraphicsEllipseItem):
 		self.text.setX(-self.text.boundingRect().width()/2)
 		self.text.setY(-self.text.boundingRect().height()/2)
 		
-		self.edges = list[Edge]
-		
+		self.edges: list[Edge] = []
 		
 		self.setFlag(QGraphicsItem.ItemIsMovable)
 		self.setFlag(QGraphicsItem.ItemIsSelectable)
 		self.setZValue(-1)
 		self.setBrush(QColor(35, 158, 207))
-		netgraph.add_node(id, obj=self, info=nodeInfo)
 	
 	def getName(self) -> str:
 		return self.text.toPlainText()
@@ -233,7 +243,6 @@ class Node(QGraphicsEllipseItem):
 class Edge(QGraphicsLineItem):
 	def __init__(self, u: Node, v: Node, edgeInfo: dict = {}):
 		super(Edge, self).__init__(QLineF(u.pos(), v.pos()))
-		netgraph.add_edge(u, v, obj=self, info=edgeInfo)
 		self.nodes = (u, v)
 		pen = QPen()
 		pen.setWidth(3)
