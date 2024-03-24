@@ -1,7 +1,7 @@
 #!./venv/bin/python
 from __future__ import annotations
 from PySide6.QtCore import Qt, QLine, QPointF, QLineF
-from PySide6.QtGui import QFont, QPainter, QColor, QPen, QPainterPath, QAction, QIcon
+from PySide6.QtGui import QFont, QPainter, QColor, QPen, QPainterPath, QAction, QIcon, QTransform
 from PySide6.QtWidgets import (
 	QGraphicsSceneMouseEvent, QLabel, QMainWindow, QApplication, QWidget,
 	QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout,
@@ -9,13 +9,14 @@ from PySide6.QtWidgets import (
 	QGraphicsItem, QGraphicsPathItem, QListWidget,
 	QListWidgetItem, QMenuBar, QMenu, QToolBar,
 	QGraphicsItemGroup, QGraphicsTextItem,
-	QGraphicsLineItem
+	QGraphicsLineItem, QStyle
 )
 import networkx as nx
 import network as net
 from enum import Enum
 import random
 import resources_rc
+import itertools
 
 rad = 5
 NODE_RAD = 45
@@ -25,6 +26,10 @@ class ToolMode(Enum):
 	MOVE=2
 	CONNECT=3
 	NEW=4
+
+def createNodeNameGenerator(basename: str):
+	for i in itertools.count(1, 1):
+		yield f"{basename} {i}"
 
 class WindowClass(QMainWindow):
 	def __init__(self):
@@ -84,7 +89,7 @@ class WindowClass(QMainWindow):
 		return toolbar
 	
 	def setToolMode(self, toolMode: ToolMode) -> None:
-		self.view.scene.toolMode = toolMode
+		self.view.scene.setToolMode(toolMode)
 
 
 class MainWidget(QWidget):
@@ -136,6 +141,16 @@ class SceneClass(QGraphicsScene):
 		self.toolMode = ToolMode.SELECT
 		self.netgraph = nx.Graph()
 
+		self.onclick = None
+		self.nodeNameGenerators = self.createNodeNameGenerators(["Host", "VNF"])
+		self.tools = {
+			ToolMode.SELECT.value: (None, None),
+			ToolMode.NEW.value: (self.setToolNew, self.unsetToolNew),
+			ToolMode.CONNECT.value: (self.setToolConnect, None),
+			ToolMode.MOVE.value: (None, None)
+		}
+		
+
 	def drawBackground(self, painter, rect):
 		painter.fillRect(rect, QColor(210, 210, 210))
 		left = int(rect.left()) - int((rect.left()) % self.grid)
@@ -151,12 +166,30 @@ class SceneClass(QGraphicsScene):
 		painter.drawLines(lines)
 
 	def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
-		print(self.toolMode.name)
+		if event.button() == Qt.LeftButton:
+			if self.onclick != None:
+				self.onclick(event)
 		if event.button() == Qt.RightButton:
-			node = self.addNode("Cliente", event.scenePos())
-			node2 = self.addNode("Servidor", event.scenePos() + QPointF(100, 100))
+			node = self.addNode(self.getNodeName("Host"), event.scenePos())
+			node2 = self.addNode(self.getNodeName("Host"), event.scenePos() + QPointF(100, 100))
 			edge = self.connectNodes(node, node2)
+		prevSel = list(filter(lambda i: type(i) == Node, self.selectedItems()))
 		super(SceneClass, self).mousePressEvent(event)
+		currSel = list(filter(lambda i: type(i) == Node, self.selectedItems()))
+		if self.toolMode == ToolMode.CONNECT and len(prevSel) > 0 and len(currSel) > 0:
+			self.connectNodes(prevSel[0], currSel[0])
+	
+	def selectItemAtCursor(self, event: QGraphicsSceneMouseEvent) -> None:
+		items = self.items(event.scenePos())
+		nodes = list(filter(lambda i: type(i) == Node, items))
+		if event.modifiers() == Qt.KeyboardModifier.ShiftModifier:
+			for node in nodes:
+				node.setSelected(True)
+		print(items)
+		print(nodes)
+	
+	def getToolFunction(self):
+		return self.toolFunctions[self.toolMode.value]
 	
 	def addNode(self, id: str, position: QPointF, nodeInfo: dict = {}) -> Node:
 		node = Node(id, nodeInfo)
@@ -166,6 +199,26 @@ class SceneClass(QGraphicsScene):
 
 		return node
 	
+	def setToolMode(self, toolMode):
+		unsetf = self.tools[self.toolMode.value][1]
+		setf = self.tools[toolMode.value][0]
+		if not unsetf is None: unsetf()
+		if not setf is None: setf()
+		self.toolMode = toolMode
+		print(self.toolMode)
+	
+	def setToolNew(self):
+		self.onclick = self.createNodeAtCursor
+	
+	def unsetToolNew(self):
+		self.onclick = None
+	
+	def setToolConnect(self):
+		self.clearSelection()
+
+	def createNodeAtCursor(self, event: QGraphicsSceneMouseEvent):
+		self.addNode(self.getNodeName("Host"), event.scenePos())
+
 	def connectNodes(self, u: Node, v: Node, edgeInfo={}) -> Edge:
 		edge = Edge(u, v)
 		self.netgraph.add_edge(u, v, obj=self, info=edgeInfo)
@@ -174,7 +227,15 @@ class SceneClass(QGraphicsScene):
 		self.addItem(edge)
 
 		return edge
-
+	
+	def createNodeNameGenerators(self, nodeTypes: list[str]) -> dict:
+		generators: dict = {}
+		for nodeT in nodeTypes:
+			generators[nodeT] = createNodeNameGenerator(nodeT)
+		return generators
+	
+	def getNodeName(self, nodeType: str) -> str:
+		return next(self.nodeNameGenerators[nodeType])
 
 class Node(QGraphicsEllipseItem):
 	def __init__(self, id: str, nodeInfo: dict = {}):
@@ -194,7 +255,7 @@ class Node(QGraphicsEllipseItem):
 		
 		self.setFlag(QGraphicsItem.ItemIsMovable)
 		self.setFlag(QGraphicsItem.ItemIsSelectable)
-		self.setZValue(-1)
+		self.setZValue(1)
 		self.setBrush(QColor(35, 158, 207))
 	
 	def getName(self) -> str:
@@ -202,11 +263,26 @@ class Node(QGraphicsEllipseItem):
 	
 	def addEdge(self, edge: Edge) -> None:
 		self.edges.append(edge)
+
+	def paint(self, painter, option, widget):
+		option.state &= ~QStyle.State_Selected
+		super(Node, self).paint(painter, option, widget)
 	
 	def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent) -> None:
 		for edge in self.edges:
 			edge.updateLine()
 		return super().mouseMoveEvent(event)
+
+	def itemChange(self, change: QGraphicsItem.GraphicsItemChange, value):
+		if change == QGraphicsItem.ItemSelectedChange:
+			# Selection is false when the item change to select the item is ocurring.
+			# Therefore, it is needed to invert the following condition to highlight 
+			# the selected items.
+			if not self.isSelected():
+				p = QPen(QColor(255,255,255), 3)
+			else: p = QPen(QColor(0, 0, 0), 1)
+			self.setPen(p)
+		return super().itemChange(change, value)
 
 	
 
@@ -217,11 +293,27 @@ class Edge(QGraphicsLineItem):
 		pen = QPen()
 		pen.setWidth(3)
 		self.setPen(pen)
+		self.setFlag(QGraphicsItem.ItemIsSelectable)
 
 		self.setZValue(0.5)
 	
 	def updateLine(self):
 		self.setLine(QLineF(self.nodes[0].pos(), self.nodes[1].pos()))
+
+	def paint(self, painter, option, widget):
+		option.state &= ~QStyle.State_Selected
+		super(Edge, self).paint(painter, option, widget)
+	
+	def itemChange(self, change: QGraphicsItem.GraphicsItemChange, value):
+		if change == QGraphicsItem.ItemSelectedChange:
+			# Selection is false when the item change to select the item is ocurring.
+			# Therefore, it is needed to invert the following condition to highlight 
+			# the selected items.
+			if not self.isSelected():
+				p = QPen(QColor(255,255,255), 6)
+			else: p = QPen(QColor(0, 0, 0), 3)
+			self.setPen(p)
+		return super().itemChange(change, value)
 
 
 class Path(QGraphicsPathItem):
