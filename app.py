@@ -13,11 +13,18 @@ from PySide6.QtWidgets import (
 )
 import networkx as nx
 import network as net
+from enum import Enum
 import random
 import resources_rc
 
 rad = 5
 NODE_RAD = 45
+
+class ToolMode(Enum):
+	SELECT=1
+	MOVE=2
+	CONNECT=3
+	NEW=4
 
 class WindowClass(QMainWindow):
 	def __init__(self):
@@ -124,8 +131,6 @@ class SceneClass(QGraphicsScene):
 		super(SceneClass, self).__init__()
 		self.setSceneRect(-500, -500, 1000, 1000)
 		self.grid = 40
-		self.it = None
-		self.node = None
 		self.netgraph = nx.Graph()
 
 	def drawBackground(self, painter, rect):
