@@ -226,8 +226,6 @@ class SceneClass(QGraphicsScene):
 			return None
 		edge = Edge(u, v)
 		self.netgraph.add_edge(u.getName(), v.getName(), obj=self, info=edgeInfo)
-		print(self.netgraph.nodes)
-		print(self.netgraph.edges)
 		u.addEdge(edge)
 		v.addEdge(edge)
 		self.addItem(edge)
@@ -246,7 +244,6 @@ class SceneClass(QGraphicsScene):
 class Node(QGraphicsEllipseItem):
 	def __init__(self, id: str, nodeInfo: dict = {}):
 		# Using -NODE_RAD for the x and y of the bounding rectangle aligns the rectangle at the center of the node
-		self.i = 0
 		super(Node, self).__init__(-NODE_RAD, -NODE_RAD, 2*NODE_RAD, 2*NODE_RAD)
 
 		# Instantiate the text object
