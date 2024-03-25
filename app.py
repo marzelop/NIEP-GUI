@@ -169,12 +169,10 @@ class SceneClass(QGraphicsScene):
 		if event.button() == Qt.LeftButton:
 			if self.onclick != None:
 				self.onclick(event)
-		if event.button() == Qt.RightButton:
-			node = self.addNode(self.getNodeName("Host"), event.scenePos())
-			node2 = self.addNode(self.getNodeName("Host"), event.scenePos() + QPointF(100, 100))
-			edge = self.connectNodes(node, node2)
+
 		prevSel = list(filter(lambda i: type(i) == Node, self.selectedItems()))
 		super(SceneClass, self).mousePressEvent(event)
+
 		currSel = list(filter(lambda i: type(i) == Node, self.selectedItems()))
 		if self.toolMode == ToolMode.CONNECT and len(prevSel) > 0 and len(currSel) > 0:
 			u, v = prevSel[0], currSel[0]
