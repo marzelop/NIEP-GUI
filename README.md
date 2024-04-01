@@ -24,4 +24,5 @@ The application was built using Python 3.10.12 using the Qt framework with the [
 [Cursor icons created by Freepik - Flaticon](https://www.flaticon.com/free-icons/cursor)\
 [Stop icons created by Freepik - Flaticon](https://www.flaticon.com/free-icons/stop)\
 [Straight icons created by Flipicon - Flaticon](https://www.flaticon.com/free-icons/straight)\
-[Plus icons created by srip - Flaticon](https://www.flaticon.com/free-icons/plus)
+[Plus icons created by srip - Flaticon](https://www.flaticon.com/free-icons/plus)\
+[Trash can icons created by Freepik - Flaticon](https://www.flaticon.com/free-icons/trash-can)
