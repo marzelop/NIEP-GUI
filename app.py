@@ -28,6 +28,7 @@ class ToolMode(Enum):
 	MOVE=2
 	CONNECT=3
 	NEW=4
+	DELETE=5
 
 def createNodeNameGenerator(basename: str):
 	for i in itertools.count(1, 1):
@@ -101,7 +102,8 @@ class WindowClass(QMainWindow):
 			"&Select": (lambda: self.setToolMode(ToolMode.SELECT), ":cursor.png"),
 			"&Move": (lambda: self.setToolMode(ToolMode.MOVE), ":palm-of-hand.png"),
 			"&Connect": (lambda: self.setToolMode(ToolMode.CONNECT), ":line.png"),
-			"&New": (lambda: self.setToolMode(ToolMode.NEW), ":add.png")
+			"&New": (lambda: self.setToolMode(ToolMode.NEW), ":add.png"),
+			"&Delete": (lambda: self.setToolMode(ToolMode.DELETE), ":trash.png")
 		}
 		for action in actions.keys():
 			self.editActions.append(QAction(QIcon(actions[action][ICON_PATH]), action))
@@ -289,7 +291,8 @@ class SceneClass(QGraphicsScene):
 			ToolMode.SELECT.value: (None, None),
 			ToolMode.NEW.value: (self.setToolNew, self.unsetToolNew),
 			ToolMode.CONNECT.value: (self.setToolConnect, None),
-			ToolMode.MOVE.value: (None, None)
+			ToolMode.MOVE.value: (None, None),
+			ToolMode.DELETE.value: (self.setToolDelete, None)
 		}
 		
 	def drawBackground(self, painter, rect):
@@ -316,11 +319,16 @@ class SceneClass(QGraphicsScene):
 
 		currSel = self.selectedItems()
 		currSelNodes = list(filter(lambda i: type(i) == Node, currSel))
-		if self.toolMode == ToolMode.CONNECT and len(prevSelNodes) > 0 and len(currSelNodes) > 0:
-			u, v = prevSelNodes[0], currSelNodes[0]
-			if u != v:
-				self.connectNodes(u, v)
-	
+		if self.toolMode == ToolMode.DELETE and len(currSel) > 0:
+			self.remove(currSel[0])
+		if len(currSelNodes) > 0:
+			u = currSelNodes[0]
+			if len(prevSelNodes) > 0:
+				v = prevSelNodes[0]
+				if self.toolMode == ToolMode.CONNECT:
+					if u != v:
+						self.connectNodes(v, u)
+		
 	def getToolFunction(self):
 		return self.toolFunctions[self.toolMode.value]
 	
@@ -370,6 +378,9 @@ class SceneClass(QGraphicsScene):
 	
 	def setToolConnect(self):
 		self.clearSelection()
+	
+	def setToolDelete(self):
+		self.clearSelection()
 
 	def createNodeAtCursor(self, event: QGraphicsSceneMouseEvent):
 		self.addDefaultHostNode(event.scenePos())
@@ -393,6 +404,26 @@ class SceneClass(QGraphicsScene):
 	
 	def getNodeName(self, nodeType: str) -> str:
 		return next(self.nodeNameGenerators[nodeType])
+	
+	def remove(self, obj: Node | Edge):
+		if type(obj) == Node:
+			self.removeNode(obj)
+		else:
+			self.removeEdge(obj)
+	
+	def removeEdge(self, edge: Edge):
+		self.netgraph.remove_edge(edge.nodes[0].getName(), edge.nodes[1].getName())
+		edge.nodes[0].removeEdge(edge)
+		edge.nodes[1].removeEdge(edge)
+		self.removeItem(edge)
+
+
+	def removeNode(self, node: Node):
+		for edge in list(node.edges):
+			self.removeEdge(edge)
+		self.netgraph.remove_node(node.getName())
+		self.removeItem(node)
+
 
 class Node(QGraphicsEllipseItem):
 	def __init__(self, id: str, nodeInfo: dict = {}):
@@ -446,6 +477,9 @@ class Node(QGraphicsEllipseItem):
 			else: p = QPen(QColor(0, 0, 0), 1)
 			self.setPen(p)
 		return super().itemChange(change, value)
+
+	def removeEdge(self, edge: Edge):
+		self.edges.remove(edge)
 
 	
 class Edge(QGraphicsLineItem):
