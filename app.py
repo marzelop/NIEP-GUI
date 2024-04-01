@@ -166,9 +166,11 @@ class ElementViewer(QWidget):
 		nodeName = node.getName()
 		nodeInfo = self.getNodeFromScene(nodeName)["info"]
 		layout = self.layout()
-		nameLabel = QLabel(nodeName)
+		nameLabel = QLabel("Node")
 		nameLabel.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+		nameEdit = NodeNameEditor(nodeName, self.scene)
 		layout.addWidget(nameLabel)
+		layout.addWidget(nameEdit)
 		for interface in nodeInfo["INTERFACES"]:
 			for k in interface.keys():
 				layout.addWidget(ElementLineEditor(interface, k))
@@ -191,6 +193,27 @@ class ElementViewer(QWidget):
 			return
 		self.setElement(elements[0])
 
+
+class NodeNameEditor(QWidget):
+	def __init__(self, nodeName: str, scene: SceneClass):
+		super(NodeNameEditor, self).__init__()
+		self.nodeName = nodeName
+		self.scene = scene
+
+		layout = QHBoxLayout()
+		nameEdit = QLineEdit(nodeName)
+		nameEdit.editingFinished.connect(self.updateNodeName)
+		layout.addWidget(QLabel(f"Name:"))
+		layout.addWidget(nameEdit)
+		self.setLayout(layout)
+		self.nameEdit = nameEdit
+	
+	def updateNodeName(self):
+		newName = self.nameEdit.text()
+		if not self.scene.renameNode(self.nodeName, newName):
+			self.nameEdit.setText(self.nodeName)
+			return
+		self.nodeName = newName
 
 class ElementLineEditor(QWidget):
 	def __init__(self, modDict: dict, modKey: str):
@@ -293,6 +316,14 @@ class SceneClass(QGraphicsScene):
 	def getNode(self, nodeName: str):
 		return self.netgraph.nodes[nodeName]
 	
+	def renameNode(self, nodeName: str, newName: str) -> bool:
+		if self.netgraph.has_node(newName):
+			return False
+		self.netgraph = nx.relabel_nodes(self.netgraph, {nodeName: newName})
+		self.getNode(newName)["obj"].setName(newName)
+
+		return True
+	
 	def addDefaultHostNode(self, position: QPointF) -> Node:
 		return self.addNode(self.getNodeName("Host"), position, {
 			"INTERFACES": [
@@ -360,6 +391,9 @@ class Node(QGraphicsEllipseItem):
 	
 	def getName(self) -> str:
 		return self.text.toPlainText()
+	
+	def setName(self, newName: str):
+		self.text.setPlainText(newName)
 	
 	def addEdge(self, edge: Edge) -> None:
 		self.edges.append(edge)
