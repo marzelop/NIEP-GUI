@@ -265,16 +265,6 @@ class SceneClass(QGraphicsScene):
 			if u != v:
 				self.connectNodes(u, v)
 	
-	# Unused for now
-	def selectItemAtCursor(self, event: QGraphicsSceneMouseEvent) -> None:
-		items = self.items(event.scenePos())
-		nodes = list(filter(lambda i: type(i) == Node, items))
-		if event.modifiers() == Qt.KeyboardModifier.ShiftModifier:
-			for node in nodes:
-				node.setSelected(True)
-		print(items)
-		print(nodes)
-	
 	def getToolFunction(self):
 		return self.toolFunctions[self.toolMode.value]
 	
