@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
 	QListWidgetItem, QMenuBar, QMenu, QToolBar,
 	QGraphicsItemGroup, QGraphicsTextItem,
 	QGraphicsLineItem, QStyle, QLayout, QSpacerItem,
-	QSizePolicy, QLineEdit
+	QSizePolicy, QLineEdit, QScrollArea
 )
 import networkx as nx
 from enum import Enum
@@ -47,7 +47,6 @@ def createMACAddrGenerator():
 		for b in bs:
 			mac += f"{b:02x}:"
 		yield mac[0:-1]
-
 
 def clearLayout(layout: QLayout):
 	while (item := layout.itemAt(0)) != None:
@@ -137,6 +136,7 @@ class EditMenu(QWidget):
 		QListWidgetItem("test3", self.options)
 		layout.addWidget(self.options)
 		layout.addWidget(self.elementViewer)
+		self.setMinimumWidth(200)
 		self.setLayout(layout)
 
 
@@ -150,6 +150,8 @@ class ElementViewer(QWidget):
 		self.setPalette(QColor(255, 255, 255))
 		self.setLayout(QVBoxLayout())
 		self.setElement(None)
+		self.setMaximumHeight(300)
+		
 	
 	def setElement(self, element: Node | Edge | None):
 		clearLayout(self.layout())
@@ -166,14 +168,36 @@ class ElementViewer(QWidget):
 		nodeName = node.getName()
 		nodeInfo = self.getNodeFromScene(nodeName)["info"]
 		layout = self.layout()
+		layout.setSpacing(0)
 		nameLabel = QLabel("Node")
 		nameLabel.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 		nameEdit = NodeNameEditor(nodeName, self.scene)
 		layout.addWidget(nameLabel)
 		layout.addWidget(nameEdit)
-		for interface in nodeInfo["INTERFACES"]:
+		for i, interface in enumerate(nodeInfo["INTERFACES"]):
+			ilabel = QLabel(f"Interface {i+1}:")
+			layout.addWidget(ilabel)
 			for k in interface.keys():
 				layout.addWidget(ElementLineEditor(interface, k))
+		newInterfaceButton = QPushButton(QIcon(":add.png"), "")
+		newInterfaceButton.setToolTip("Add new interface")
+		newInterfaceButton.clicked.connect(self.addInterface)
+		layout.addWidget(newInterfaceButton)
+	
+	def addInterface(self):
+		node: Node = self.element
+		iface = {"IP": None, "MAC": "00:00:00:00:00:00"}
+		node.nodeInfo["INTERFACES"].append(iface)
+		inum = len(node.nodeInfo["INTERFACES"])
+		layout = self.layout()
+		ilabel = QLabel(f"Interface {inum}:")
+		button = layout.itemAt(layout.count()-1).widget()
+		layout.removeWidget(button)
+		layout.addWidget(ilabel)
+		for k in iface.keys():
+			layout.addWidget(ElementLineEditor(iface, k))
+		layout.addWidget(button)
+		
 
 	def setEdge(self, edge: Edge):
 		pass
@@ -223,6 +247,7 @@ class ElementLineEditor(QWidget):
 
 		layout = QHBoxLayout()
 		keyEdit = QLineEdit(modDict[modKey])
+		keyEdit.setFixedWidth(110)
 		keyEdit.editingFinished.connect(lambda: self.modDict.update({self.modKey: keyEdit.text()}))
 		layout.addWidget(QLabel(f"{modKey}:"))
 		layout.addWidget(keyEdit)
@@ -377,6 +402,7 @@ class Node(QGraphicsEllipseItem):
 		# Instantiate the text object
 		self.text = QGraphicsTextItem(id, parent=self)
 		self.setName(id)
+		self.nodeInfo = nodeInfo
 		
 		self.edges: list[Edge] = []
 		
