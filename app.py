@@ -1,7 +1,7 @@
 #!./venv/bin/python
 from __future__ import annotations
 from PySide6.QtCore import Qt, QLine, QPointF, QLineF
-from PySide6.QtGui import QFont, QPainter, QColor, QPen, QPainterPath, QAction, QIcon, QTransform
+from PySide6.QtGui import QFont, QPainter, QColor, QPen, QPainterPath, QAction, QIcon, QTransform, QPalette
 from PySide6.QtWidgets import (
 	QGraphicsSceneMouseEvent, QLabel, QMainWindow, QApplication, QWidget,
 	QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout,
@@ -9,14 +9,16 @@ from PySide6.QtWidgets import (
 	QGraphicsItem, QGraphicsPathItem, QListWidget,
 	QListWidgetItem, QMenuBar, QMenu, QToolBar,
 	QGraphicsItemGroup, QGraphicsTextItem,
-	QGraphicsLineItem, QStyle
+	QGraphicsLineItem, QStyle, QLayout, QSpacerItem,
+	QSizePolicy, QLineEdit
 )
 import networkx as nx
-import network as net
 from enum import Enum
 import random
 import resources_rc
 import itertools
+import sys
+from socket import inet_ntoa
 
 rad = 5
 NODE_RAD = 45
@@ -31,6 +33,27 @@ def createNodeNameGenerator(basename: str):
 	for i in itertools.count(1, 1):
 		yield f"{basename} {i}"
 
+def createIPv4Generator():
+	# 0xc0a80001 = 192.168.0.1
+	for i in itertools.count(0xc0a80001, 1):
+		ip = inet_ntoa(i.to_bytes(4, byteorder="big"))
+		ip += "/24"
+		yield ip
+
+def createMACAddrGenerator():
+	for i in itertools.count(0x000000000000, 1):
+		bs = i.to_bytes(6, "big")
+		mac = ""
+		for b in bs:
+			mac += f"{b:02x}:"
+		yield mac[0:-1]
+
+
+def clearLayout(layout: QLayout):
+	while (item := layout.itemAt(0)) != None:
+		item.widget().deleteLater()
+		layout.removeWidget(item.widget())
+
 class WindowClass(QMainWindow):
 	def __init__(self):
 		super(WindowClass, self).__init__()
@@ -38,11 +61,11 @@ class WindowClass(QMainWindow):
 		self.mainWidget = MainWidget()
 		self.editMenu = self.mainWidget.editMenu
 		self.view = self.mainWidget.view
-		self.menuBar = self.createMenuBar()
+		self.menu = self.createMenuBar()
 		self.editToolbar = self.createEditToolBar()
 		self.addToolBar(self.editToolbar)
 
-		self.setMenuBar(self.menuBar)
+		self.setMenuBar(self.menu)
 		self.setCentralWidget(self.mainWidget)
 	
 	def createMenuBar(self) -> QMenuBar:
@@ -96,7 +119,7 @@ class MainWidget(QWidget):
 	def __init__(self):
 		super(MainWidget, self).__init__()
 		self.editMenu = EditMenu()
-		self.view = ViewClass()
+		self.view = ViewClass(self.editMenu)
 		layout = QHBoxLayout()
 		layout.addWidget(self.editMenu)
 		layout.addWidget(self.view)
@@ -108,20 +131,80 @@ class EditMenu(QWidget):
 		super(EditMenu, self).__init__()
 		layout = QVBoxLayout()
 		self.options = QListWidget()
+		self.elementViewer = ElementViewer()
 		QListWidgetItem("test1", self.options)
 		QListWidgetItem("test2", self.options)
 		QListWidgetItem("test3", self.options)
 		layout.addWidget(self.options)
+		layout.addWidget(self.elementViewer)
 		self.setLayout(layout)
 
 
-class ViewClass(QGraphicsView):
+class ElementViewer(QWidget):
 	def __init__(self):
+		super(ElementViewer, self).__init__()
+		self.element: Node | Edge | None = None
+		self.attributes: dict | None = None
+		self.scene: SceneClass = None
+		self.setAutoFillBackground(True)
+		self.setPalette(QColor(255, 255, 255))
+		self.setLayout(QGridLayout())
+		self.setElement(None)
+	
+	def setElement(self, element: Node | Edge | None):
+		clearLayout(self.layout())
+		self.element = element
+		self.show()
+		if type(element) == Node:
+			self.setNode(element)
+		elif type(element) == Edge:
+			self.setEdge(element)
+		else:
+			self.hide()
+
+	def setNode(self, node: Node):
+		nodeName = node.getName()
+		nodeInfo = self.getNodeFromScene(nodeName)["info"]
+		layout = self.layout()
+		nameLabel = QLabel(nodeName)
+		nameLabel.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+		layout.addWidget(nameLabel, 0, 0, 1, 2)
+		gridrow = 1
+		for interface in nodeInfo["INTERFACES"]:
+			for k in interface.keys():
+				layout.addWidget(QLabel(f"{k}:"), gridrow, 0)
+				keyEdit = None
+				keyEdit = QLineEdit(interface[k])
+				layout.addWidget(keyEdit, gridrow, 1)
+				keyEdit.editingFinished.connect(lambda: interface.update({k: keyEdit.text()}) or print(f"{k[:]} de {nodeName} atualizado."))
+				gridrow += 1
+
+	def setEdge(self, edge: Edge):
+		pass
+
+	def setScene(self, scene: SceneClass):
+		self.scene = scene
+		scene.selectionChanged.connect(self.updateElement)
+
+	def getNodeFromScene(self, nodeName: str) -> dict:
+		return self.scene.getNode(nodeName)
+
+	# Slot
+	def updateElement(self):
+		elements = self.scene.selectedItems()
+		if len(elements) == 0:
+			self.setElement(None)
+			return
+		self.setElement(elements[0])
+
+
+class ViewClass(QGraphicsView):
+	def __init__(self, editMenu: EditMenu):
 		super(ViewClass, self).__init__()
 
 		self.setDragMode(QGraphicsView.RubberBandDrag)
 
-		self.scene = SceneClass()
+		self.scene = SceneClass(editMenu)
 		self.setScene(self.scene)
 		self.setRenderHint(QPainter.Antialiasing)
 	
@@ -134,12 +217,15 @@ class ViewClass(QGraphicsView):
 
 
 class SceneClass(QGraphicsScene):
-	def __init__(self, id=None):
+	def __init__(self, editMenu: EditMenu):
 		super(SceneClass, self).__init__()
 		self.setSceneRect(-500, -500, 1000, 1000)
 		self.grid = 40
 		self.toolMode = ToolMode.SELECT
 		self.netgraph = nx.Graph()
+		editMenu.elementViewer.setScene(self)
+		self.ipv4gen = createIPv4Generator()
+		self.macaddrgen = createMACAddrGenerator()
 
 		self.onclick = None
 		self.nodeNameGenerators = self.createNodeNameGenerators(["Host", "VNF"])
@@ -150,7 +236,6 @@ class SceneClass(QGraphicsScene):
 			ToolMode.MOVE.value: (None, None)
 		}
 		
-
 	def drawBackground(self, painter, rect):
 		painter.fillRect(rect, QColor(210, 210, 210))
 		left = int(rect.left()) - int((rect.left()) % self.grid)
@@ -169,16 +254,18 @@ class SceneClass(QGraphicsScene):
 		if event.button() == Qt.LeftButton:
 			if self.onclick != None:
 				self.onclick(event)
+		prevSel = self.selectedItems()
+		prevSelNodes = list(filter(lambda i: type(i) == Node, prevSel))
+		super(SceneClass, self).mousePressEvent(event) # This updates the selected elements
 
-		prevSel = list(filter(lambda i: type(i) == Node, self.selectedItems()))
-		super(SceneClass, self).mousePressEvent(event)
-
-		currSel = list(filter(lambda i: type(i) == Node, self.selectedItems()))
-		if self.toolMode == ToolMode.CONNECT and len(prevSel) > 0 and len(currSel) > 0:
-			u, v = prevSel[0], currSel[0]
+		currSel = self.selectedItems()
+		currSelNodes = list(filter(lambda i: type(i) == Node, currSel))
+		if self.toolMode == ToolMode.CONNECT and len(prevSelNodes) > 0 and len(currSelNodes) > 0:
+			u, v = prevSelNodes[0], currSelNodes[0]
 			if u != v:
-				self.connectNodes(prevSel[0], currSel[0])
+				self.connectNodes(u, v)
 	
+	# Unused for now
 	def selectItemAtCursor(self, event: QGraphicsSceneMouseEvent) -> None:
 		items = self.items(event.scenePos())
 		nodes = list(filter(lambda i: type(i) == Node, items))
@@ -191,6 +278,12 @@ class SceneClass(QGraphicsScene):
 	def getToolFunction(self):
 		return self.toolFunctions[self.toolMode.value]
 	
+	def getNewIPv4addr(self):
+		return next(self.ipv4gen)
+	
+	def getNewMACaddr(self):
+		return next(self.macaddrgen)
+	
 	def addNode(self, id: str, position: QPointF, nodeInfo: dict = {}) -> Node:
 		node = Node(id, nodeInfo)
 		self.netgraph.add_node(id, obj=node, info=nodeInfo)
@@ -199,13 +292,21 @@ class SceneClass(QGraphicsScene):
 
 		return node
 	
+	def getNode(self, nodeName: str):
+		return self.netgraph.nodes[nodeName]
+	
+	def addDefaultHostNode(self, position: QPointF) -> Node:
+		return self.addNode(self.getNodeName("Host"), position, {
+			"INTERFACES": [
+				{"IP": self.getNewIPv4addr(), "MAC": self.getNewMACaddr()},
+			]})
+	
 	def setToolMode(self, toolMode):
 		unsetf = self.tools[self.toolMode.value][1]
 		setf = self.tools[toolMode.value][0]
 		if not unsetf is None: unsetf()
 		if not setf is None: setf()
 		self.toolMode = toolMode
-		print(self.toolMode)
 	
 	def setToolNew(self):
 		self.onclick = self.createNodeAtCursor
@@ -217,7 +318,7 @@ class SceneClass(QGraphicsScene):
 		self.clearSelection()
 
 	def createNodeAtCursor(self, event: QGraphicsSceneMouseEvent):
-		self.addNode(self.getNodeName("Host"), event.scenePos())
+		self.addDefaultHostNode(event.scenePos())
 
 	def connectNodes(self, u: Node, v: Node, edgeInfo={}) -> Edge:
 		if self.netgraph.has_edge(u.getName(), v.getName()):
@@ -286,7 +387,6 @@ class Node(QGraphicsEllipseItem):
 		return super().itemChange(change, value)
 
 	
-
 class Edge(QGraphicsLineItem):
 	def __init__(self, u: Node, v: Node, edgeInfo: dict = {}):
 		super(Edge, self).__init__(QLineF(u.pos(), v.pos()))
