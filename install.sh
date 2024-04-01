@@ -19,7 +19,7 @@ then
 	if [ ! -f "$VENV/bin/activate" ]
 	then
 		echo "Creating virtual enviroment $VENV"
-		python -m venv $VENV
+		python3 -m venv $VENV
 		if [ $? -ne 0 ]
 		then
 			echo "Error on creating virtual enviroment. Aborting."
@@ -32,7 +32,7 @@ fi
 # Instala as dependências do pip
 for DEP in ${PIP_DEP[@]}
 do
-	pip install $DEP
+	pip3 install $DEP
 done
 
 echo "Generating qrc_resources.py"
