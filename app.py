@@ -19,6 +19,7 @@ import resources_rc
 import itertools
 import sys
 from socket import inet_ntoa
+import json_export
 
 rad = 5
 NODE_RAD = 50
@@ -76,7 +77,7 @@ class WindowClass(QMainWindow):
 				"Load": None,
 				"Save": None,
 				"Save as ...": None,
-				"Export as ...": None
+				"Export as ...": lambda: json_export.netgraph_to_json(self.mainWidget.view.scene.netgraph, "out.json") 
 			},
 			"&Help": {
 				"Documentation": None,
@@ -84,11 +85,18 @@ class WindowClass(QMainWindow):
 				"Troubleshooting": None
 			}
 		}
-
+		self.actions = []
 		for menu in menus.keys():
 			newmenu = QMenu(menu)
 			for action in menus[menu].keys():
-				newmenu.addAction(action)
+				a = QAction(action)
+				self.actions.append(a)
+				# Conditional for development: Should be removed after complete menu functionality
+				if menus[menu][action] != None:
+					a.triggered.connect(menus[menu][action])
+				newmenu.addAction(self.actions[-1])
+				#newmenu.addAction(action)
+
 			menuBar.addMenu(newmenu)
 
 		return menuBar
