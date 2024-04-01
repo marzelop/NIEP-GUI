@@ -148,7 +148,7 @@ class ElementViewer(QWidget):
 		self.scene: SceneClass = None
 		self.setAutoFillBackground(True)
 		self.setPalette(QColor(255, 255, 255))
-		self.setLayout(QGridLayout())
+		self.setLayout(QVBoxLayout())
 		self.setElement(None)
 	
 	def setElement(self, element: Node | Edge | None):
@@ -168,16 +168,10 @@ class ElementViewer(QWidget):
 		layout = self.layout()
 		nameLabel = QLabel(nodeName)
 		nameLabel.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-		layout.addWidget(nameLabel, 0, 0, 1, 2)
-		gridrow = 1
+		layout.addWidget(nameLabel)
 		for interface in nodeInfo["INTERFACES"]:
 			for k in interface.keys():
-				layout.addWidget(QLabel(f"{k}:"), gridrow, 0)
-				keyEdit = None
-				keyEdit = QLineEdit(interface[k])
-				layout.addWidget(keyEdit, gridrow, 1)
-				keyEdit.editingFinished.connect(lambda: interface.update({k: keyEdit.text()}) or print(f"{k[:]} de {nodeName} atualizado."))
-				gridrow += 1
+				layout.addWidget(ElementLineEditor(interface, k))
 
 	def setEdge(self, edge: Edge):
 		pass
@@ -196,6 +190,20 @@ class ElementViewer(QWidget):
 			self.setElement(None)
 			return
 		self.setElement(elements[0])
+
+
+class ElementLineEditor(QWidget):
+	def __init__(self, modDict: dict, modKey: str):
+		super(ElementLineEditor, self).__init__()
+		self.modDict = modDict
+		self.modKey = modKey
+
+		layout = QHBoxLayout()
+		keyEdit = QLineEdit(modDict[modKey])
+		keyEdit.editingFinished.connect(lambda: self.modDict.update({self.modKey: keyEdit.text()}))
+		layout.addWidget(QLabel(f"{modKey}:"))
+		layout.addWidget(keyEdit)
+		self.setLayout(layout)
 
 
 class ViewClass(QGraphicsView):
