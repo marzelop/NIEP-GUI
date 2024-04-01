@@ -21,7 +21,7 @@ import sys
 from socket import inet_ntoa
 
 rad = 5
-NODE_RAD = 45
+NODE_RAD = 50
 
 class ToolMode(Enum):
 	SELECT=1
@@ -376,11 +376,7 @@ class Node(QGraphicsEllipseItem):
 
 		# Instantiate the text object
 		self.text = QGraphicsTextItem(id, parent=self)
-		# Set max text width to 90% of node diameter
-		self.text.setTextWidth(min(0.9*2*NODE_RAD, self.text.boundingRect().width())) 
-		# Centers it within the ellipse
-		self.text.setX(-self.text.boundingRect().width()/2)
-		self.text.setY(-self.text.boundingRect().height()/2)
+		self.setName(id)
 		
 		self.edges: list[Edge] = []
 		
@@ -394,6 +390,13 @@ class Node(QGraphicsEllipseItem):
 	
 	def setName(self, newName: str):
 		self.text.setPlainText(newName)
+		self.text.adjustSize()
+		# Centers it within the ellipse
+		self.text.setX(-self.text.boundingRect().width()/2)
+		self.text.setY(-self.text.boundingRect().height()/2)
+
+		# Set max text width to 95% of node diameter
+		self.text.setTextWidth(min(0.95*2*NODE_RAD, self.text.boundingRect().width())) 
 	
 	def addEdge(self, edge: Edge) -> None:
 		self.edges.append(edge)
