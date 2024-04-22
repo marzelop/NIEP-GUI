@@ -36,7 +36,19 @@ def get_mininet(G: nx.Graph):
 	return mini
 
 def get_connections(G: nx.Graph):
-	return []
+	connections = []
+	for e in G.edges:
+		u, v = e
+		ifaces = G.edges[e]['info']['INTERFACES']
+		edgeobj = G.edges[e]['obj']
+		connection = {
+			"IN/OUT": u,
+			"IN/OUTIFACE": edgeobj.nodes[0].nodeInfo["INTERFACES"][ifaces[0]]["MAC"],
+			"OUT/IN": v,
+			"OUT/INIFACE": edgeobj.nodes[1].nodeInfo["INTERFACES"][ifaces[1]]["MAC"]
+		}
+		connections.append(connection)
+	return connections
 
 def netgraph_to_json(G: nx.Graph, filepath: str):
 	topo = dict()

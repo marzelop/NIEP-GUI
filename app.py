@@ -123,7 +123,6 @@ class WindowClass(QMainWindow):
 		fname = QFileDialog.getSaveFileName()[0]
 		if fname == '': # Prevents error when user cancel file selection or doesn't select any files
 			return
-		print(fname)
 		f(self.mainWidget.view.scene.netgraph, fname)
 		
 
@@ -451,7 +450,7 @@ class SceneClass(QGraphicsScene):
 		if self.netgraph.has_edge(u.getName(), v.getName()):
 			return None
 		edge = Edge(u, v, edgeInfo)
-		self.netgraph.add_edge(u.getName(), v.getName(), obj=self, info=edgeInfo)
+		self.netgraph.add_edge(u.getName(), v.getName(), obj=edge, info=edgeInfo)
 		u.addEdge(edge)
 		v.addEdge(edge)
 		self.addItem(edge)
