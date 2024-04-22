@@ -2,16 +2,8 @@
 from __future__ import annotations
 from PySide6.QtCore import Qt, QLine, QPointF, QLineF
 from PySide6.QtGui import QFont, QPainter, QColor, QPen, QPainterPath, QAction, QIcon, QTransform, QPalette
-from PySide6.QtWidgets import (
-	QGraphicsSceneMouseEvent, QLabel, QMainWindow, QApplication, QWidget,
-	QVBoxLayout, QHBoxLayout, QPushButton, QGridLayout,
-	QGraphicsView, QGraphicsScene, QGraphicsEllipseItem,
-	QGraphicsItem, QGraphicsPathItem, QListWidget,
-	QListWidgetItem, QMenuBar, QMenu, QToolBar,
-	QGraphicsItemGroup, QGraphicsTextItem,
-	QGraphicsLineItem, QStyle, QLayout, QSpacerItem,
-	QSizePolicy, QLineEdit, QScrollArea
-)
+from PySide6.QtWidgets import *
+from PySide6.QtWidgets import QWidget
 import networkx as nx
 from enum import Enum
 import random
@@ -77,7 +69,7 @@ class WindowClass(QMainWindow):
 				"Load": None,
 				"Save": None,
 				"Save as ...": None,
-				"Export as ...": lambda: json_export.netgraph_to_json(self.mainWidget.view.scene.netgraph, "out.json") 
+				"Export as ...": lambda: self.export("JSON") 
 			},
 			"&Help": {
 				"Documentation": None,
@@ -90,7 +82,7 @@ class WindowClass(QMainWindow):
 			newmenu = QMenu(menu)
 			for action in menus[menu].keys():
 				a = QAction(action)
-				self.actions.append(a)
+				self.actions.append(a) # Save actions so that they won't be destroyed when this function ends for some reason
 				# Conditional for development: Should be removed after complete menu functionality
 				if menus[menu][action] != None:
 					a.triggered.connect(menus[menu][action])
@@ -123,6 +115,17 @@ class WindowClass(QMainWindow):
 	def setToolMode(self, toolMode: ToolMode) -> None:
 		self.view.scene.setToolMode(toolMode)
 
+	def export(self, format: str):
+		exportFunctions = {
+			"JSON": json_export.netgraph_to_json
+		}
+		f = exportFunctions[format]
+		fname = QFileDialog.getSaveFileName()[0]
+		if fname == '': # Prevents error when user cancel file selection or doesn't select any files
+			return
+		print(fname)
+		f(self.mainWidget.view.scene.netgraph, fname)
+		
 
 class MainWidget(QWidget):
 	def __init__(self):
@@ -133,6 +136,19 @@ class MainWidget(QWidget):
 		layout.addWidget(self.editMenu)
 		layout.addWidget(self.view)
 		self.setLayout(layout)
+
+num = 20
+
+class TestWidget(QWidget):
+	def __init__(self, w) -> None:
+		super().__init__()
+		global num
+		layout = QVBoxLayout()
+		for i in range(1, num):
+			layout.addWidget(QLabel(f"Teste {i} label"))
+		layout.addWidget(w)
+		self.setLayout(layout)
+		num += 1
 
 
 class EditMenu(QWidget):
@@ -145,7 +161,7 @@ class EditMenu(QWidget):
 		QListWidgetItem("test2", self.options)
 		QListWidgetItem("test3", self.options)
 		layout.addWidget(self.options)
-		layout.addWidget(self.elementViewer)
+		layout.addWidget(self.elementViewer.scroll)
 		self.setMinimumWidth(200)
 		self.setLayout(layout)
 
@@ -159,36 +175,45 @@ class ElementViewer(QWidget):
 		self.setAutoFillBackground(True)
 		self.setPalette(QColor(255, 255, 255))
 		self.setLayout(QVBoxLayout())
+		self.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.MinimumExpanding)
+
+		self.scroll = QScrollArea()
+		self.scroll.setWidgetResizable(True)
+		self.scroll.setWidget(self)
+		
 		self.setElement(None)
-		self.setMaximumHeight(300)
 		
 	
 	def setElement(self, element: Node | Edge | None):
 		clearLayout(self.layout())
 		self.element = element
-		self.show()
+		self.scroll.setWidget(self)
 		if type(element) == Node:
 			self.setNode(element)
 		elif type(element) == Edge:
 			self.setEdge(element)
 		else:
-			self.hide()
+			self.scroll.setWidget(None)
 
 	def setNode(self, node: Node):
 		nodeName = node.getName()
 		nodeInfo = self.getNodeFromScene(nodeName)["info"]
+
 		layout = self.layout()
 		layout.setSpacing(0)
+
 		nameLabel = QLabel("Node")
 		nameLabel.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 		nameEdit = NodeNameEditor(nodeName, self.scene)
 		layout.addWidget(nameLabel)
 		layout.addWidget(nameEdit)
+
 		for i, interface in enumerate(nodeInfo["INTERFACES"]):
 			ilabel = QLabel(f"Interface {i+1}:")
 			layout.addWidget(ilabel)
 			for k in interface.keys():
 				layout.addWidget(ElementLineEditor(interface, k))
+		
 		newInterfaceButton = QPushButton(QIcon(":add.png"), "")
 		newInterfaceButton.setToolTip("Add new interface")
 		newInterfaceButton.clicked.connect(self.addInterface)
@@ -210,7 +235,25 @@ class ElementViewer(QWidget):
 		
 
 	def setEdge(self, edge: Edge):
-		pass
+		layout = self.layout()
+		layout.setSpacing(0)
+
+		nameLabel = QLabel("Edge")
+		nameLabel.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+
+		nodes = edge.nodes
+		u, v = nodes
+
+		nodesLabel = QLabel(f"Endpoints: {u.getName()} - {v.getName()}")
+		layout.addWidget(nameLabel)
+		layout.addWidget(nodesLabel)
+
+		edgeInterfaces = edge.edgeInfo["INTERFACES"]
+		for i, n in enumerate(nodes):
+			ni = n.nodeInfo["INTERFACES"]
+			layout.addWidget(QLabel(f"{n.getName()} interface:"))
+			layout.addWidget(InterfaceComboSelector(n, edge))
+
 
 	def setScene(self, scene: SceneClass):
 		self.scene = scene
@@ -262,6 +305,17 @@ class ElementLineEditor(QWidget):
 		layout.addWidget(QLabel(f"{modKey}:"))
 		layout.addWidget(keyEdit)
 		self.setLayout(layout)
+
+class InterfaceComboSelector(QComboBox):
+	def __init__(self, node: Node, edge: Edge):
+		super(InterfaceComboSelector, self).__init__()
+		self.node = node
+		self.edge = edge
+		ni = node.nodeInfo["INTERFACES"]
+		for j in range(1, len(ni)+1):
+			self.addItem(f"{j} - {ni[j-1]['MAC']}")
+		self.setCurrentIndex(edge.getNodeInterfaceIndex(node))
+		self.currentIndexChanged.connect(lambda: self.edge.updateNodeInterface(self.node, self.currentIndex()))
 
 
 class ViewClass(QGraphicsView):
@@ -335,7 +389,7 @@ class SceneClass(QGraphicsScene):
 				v = prevSelNodes[0]
 				if self.toolMode == ToolMode.CONNECT:
 					if u != v:
-						self.connectNodes(v, u)
+						self.connectNodes(v, u, {"INTERFACES": [0, 0]})
 		
 	def getToolFunction(self):
 		return self.toolFunctions[self.toolMode.value]
@@ -396,7 +450,7 @@ class SceneClass(QGraphicsScene):
 	def connectNodes(self, u: Node, v: Node, edgeInfo={}) -> Edge:
 		if self.netgraph.has_edge(u.getName(), v.getName()):
 			return None
-		edge = Edge(u, v)
+		edge = Edge(u, v, edgeInfo)
 		self.netgraph.add_edge(u.getName(), v.getName(), obj=self, info=edgeInfo)
 		u.addEdge(edge)
 		v.addEdge(edge)
@@ -498,6 +552,7 @@ class Edge(QGraphicsLineItem):
 		pen.setWidth(3)
 		self.setPen(pen)
 		self.setFlag(QGraphicsItem.ItemIsSelectable)
+		self.edgeInfo = edgeInfo
 
 		self.setZValue(0.5)
 	
@@ -518,6 +573,24 @@ class Edge(QGraphicsLineItem):
 			else: p = QPen(QColor(0, 0, 0), 3)
 			self.setPen(p)
 		return super().itemChange(change, value)
+
+	def getNodeInterface(self, i: int):
+		return self.nodes[i].nodeInfo["INTERFACES"]
+
+	def getNodeIndex(self, node: Node):
+		if node is self.nodes[0]:
+			return 0
+		elif node is self.nodes[1]:
+			return 1
+		else:
+			return -1
+
+	def updateNodeInterface(self, node: Node, value: int):
+		ni = self.getNodeIndex(node)
+		self.edgeInfo["INTERFACES"][ni] = value
+	
+	def getNodeInterfaceIndex(self, node: Node):
+		return self.edgeInfo["INTERFACES"][self.getNodeIndex(node)]
 
 
 class Path(QGraphicsPathItem):
