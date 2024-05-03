@@ -1,6 +1,11 @@
 import json
 import networkx as nx
 
+def add_default_extension(filepath: str, extension: str):
+	if len(filepath.split("/")[-1].split(".")) == 1:
+		return f"{filepath}{'.' if filepath[-1] != '.' else ''}{extension}"
+	return filepath
+
 def get_filename_no_extension(filepath: str):
 	return filepath.split("/")[-1].split(".")[0]
 
@@ -44,6 +49,9 @@ def get_connections(G: nx.Graph):
 		u, v = e
 		ifaces = G.edges[e]['info']['INTERFACES']
 		edgeobj = G.edges[e]['obj']
+		print(edgeobj)
+		print(edgeobj.nodes)
+		print(ifaces)
 		connection = {
 			"IN/OUT": u,
 			"IN/OUTIFACE": edgeobj.nodes[0].nodeInfo["INTERFACES"][ifaces[0]]["MAC"],
@@ -67,7 +75,7 @@ def generate_topo_dict(G: nx.Graph, filepath: str):
 
 def generate_topo_file(G: nx.Graph, filepath: str):
 	topo = generate_topo_dict(G, filepath)
-	with open(filepath, "w") as fp: 
+	with open(add_default_extension(filepath, "json"), "w") as fp: 
 		json.dump(topo, fp, indent=4)
 
 # Node position JSON generator
@@ -95,7 +103,7 @@ def generate_NPGI_file(G: nx.graph, filepath: str):
 	npgi["TOPO"] = generate_topo_dict(G, filepath)
 	npgi["POSITIONS"] = generate_position_dict(G)
 
-	with open(filepath, "w") as fp:
+	with open(add_default_extension(filepath, "npgi"), "w") as fp:
 		json.dump(npgi, fp, indent=4)
 
 def load_NPGI_file(filepath: str):

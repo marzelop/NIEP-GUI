@@ -137,13 +137,13 @@ class WindowClass(QMainWindow):
 			file_export.generate_NPGI_file(self.mainWidget.view.scene.netgraph, self.filepath)
 	
 	def saveTopologyAs(self):
-		self.filepath = QFileDialog.getSaveFileName()[0]
+		self.filepath = QFileDialog.getSaveFileName(filter="NPGI file (*.npgi)")[0]
 		if self.filepath == "":
 			return
 		self.saveTopology()
 	
 	def loadTopology(self):
-		filepath = QFileDialog.getSaveFileName(filter="Topology file (*.npgi)")[0]
+		filepath = QFileDialog.getOpenFileName(filter="Topology file (*.npgi)")[0]
 		if filepath == "":
 			return
 		topo = file_export.load_NPGI_file(filepath)
