@@ -1,7 +1,7 @@
 #!./venv/bin/python
 from __future__ import annotations
 from PySide6.QtCore import Qt, QLine, QPointF, QLineF
-from PySide6.QtGui import QFont, QPainter, QColor, QPen, QPainterPath, QAction, QIcon, QTransform, QPalette
+from PySide6.QtGui import QFont, QPainter, QColor, QPen, QPainterPath, QAction, QIcon, QTransform, QPalette, QKeySequence
 from PySide6.QtWidgets import *
 from PySide6.QtWidgets import QWidget
 import networkx as nx
@@ -66,16 +66,16 @@ class WindowClass(QMainWindow):
 		menuBar = QMenuBar()
 		menus = {
 			"&File": {
-				"New": None,
-				"Load": self.loadTopology,
-				"Save": self.saveTopology,
-				"Save as ...": self.saveTopologyAs,
-				"Export as ...": lambda: self.export("JSON") 
+				"New": (None, None),
+				"Load": (self.loadTopology, "Ctrl+L"),
+				"Save": (self.saveTopology, "Ctrl+S"),
+				"Save as ...": (self.saveTopologyAs, "Ctrl+Shift+S"),
+				"Export as ...": (lambda: self.export("JSON"), None)
 			},
 			"&Help": {
-				"Documentation": None,
-				"Report a bug": None,
-				"Troubleshooting": None
+				"Documentation": (None, None),
+				"Report a bug": (None, None),
+				"Troubleshooting": (None, None)
 			}
 		}
 		self.actions = []
@@ -85,8 +85,12 @@ class WindowClass(QMainWindow):
 				a = QAction(action)
 				self.actions.append(a) # Save actions so that they won't be destroyed when this function ends for some reason
 				# Conditional for development: Should be removed after complete menu functionality
-				if menus[menu][action] != None:
-					a.triggered.connect(menus[menu][action])
+				if menus[menu][action][0] != None:
+					a.triggered.connect(menus[menu][action][0])
+				shortcut = menus[menu][action][1]
+				if shortcut != None:
+					shortcut = QKeySequence(shortcut)
+					a.setShortcut(shortcut)
 				newmenu.addAction(self.actions[-1])
 				#newmenu.addAction(action)
 
