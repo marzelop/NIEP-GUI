@@ -11,6 +11,7 @@ import resources_rc
 import itertools
 import sys
 import file_export
+from webbrowser import open as webopen
 from socket import inet_ntoa
 
 rad = 5
@@ -73,7 +74,7 @@ class WindowClass(QMainWindow):
 				"Export as ...": (lambda: self.export("JSON"), None)
 			},
 			"&Help": {
-				"Documentation": (None, None),
+				"Documentation": (lambda: webopen("https://github.com/marzelop/NIEP-GUI/tree/main/docs"), None),
 				"Report a bug": (None, None),
 				"Troubleshooting": (None, None)
 			}
