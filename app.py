@@ -502,7 +502,11 @@ class SceneClass(QGraphicsScene):
 		return generators
 	
 	def getNodeName(self, nodeType: str) -> str:
-		return next(self.nodeNameGenerators[nodeType])
+		name = next(self.nodeNameGenerators[nodeType])
+		while (name in self.netgraph.nodes): # Prevents duplicates
+			name = next(self.nodeNameGenerators[nodeType])
+		print(name)
+		return name
 	
 	def remove(self, obj: Node | Edge):
 		if type(obj) == Node:
