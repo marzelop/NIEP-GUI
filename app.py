@@ -10,8 +10,8 @@ import random
 import resources_rc
 import itertools
 import sys
+import file_export
 from socket import inet_ntoa
-import json_export
 
 rad = 5
 NODE_RAD = 50
@@ -57,6 +57,7 @@ class WindowClass(QMainWindow):
 		self.menu = self.createMenuBar()
 		self.editToolbar = self.createEditToolBar()
 		self.addToolBar(self.editToolbar)
+		self.filepath = ""
 
 		self.setMenuBar(self.menu)
 		self.setCentralWidget(self.mainWidget)
@@ -67,8 +68,8 @@ class WindowClass(QMainWindow):
 			"&File": {
 				"New": None,
 				"Load": None,
-				"Save": None,
-				"Save as ...": None,
+				"Save": self.saveTopology,
+				"Save as ...": self.saveTopologyAs,
 				"Export as ...": lambda: self.export("JSON") 
 			},
 			"&Help": {
@@ -117,13 +118,26 @@ class WindowClass(QMainWindow):
 
 	def export(self, format: str):
 		exportFunctions = {
-			"JSON": json_export.netgraph_to_json
+			"JSON": file_export.generate_topo_file
 		}
 		f = exportFunctions[format]
 		fname = QFileDialog.getSaveFileName()[0]
 		if fname == '': # Prevents error when user cancel file selection or doesn't select any files
 			return
 		f(self.mainWidget.view.scene.netgraph, fname)
+	
+	def saveTopology(self):
+		if self.filepath == "":
+			self.saveTopologyAs()
+		else:
+			file_export.generate_NPGI_file(self.mainWidget.view.scene.netgraph, self.filepath)
+	
+	def saveTopologyAs(self):
+		self.filepath = QFileDialog.getSaveFileName()[0]
+		if self.filepath == "":
+			return
+		self.saveTopology()
+
 		
 
 class MainWidget(QWidget):
@@ -606,10 +620,10 @@ class Path(QGraphicsPathItem):
 		path.setElementPositionAt(index, pos.x(), pos.y())
 		self.setPath(path)
 
+if __name__ == "__main__":
+	app = QApplication()
 
-app = QApplication()
+	window = WindowClass()
+	window.show()
 
-window = WindowClass()
-window.show()
-
-app.exec()
+	app.exec()
