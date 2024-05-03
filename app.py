@@ -67,7 +67,7 @@ class WindowClass(QMainWindow):
 		menus = {
 			"&File": {
 				"New": None,
-				"Load": None,
+				"Load": self.loadTopology,
 				"Save": self.saveTopology,
 				"Save as ...": self.saveTopologyAs,
 				"Export as ...": lambda: self.export("JSON") 
@@ -137,8 +137,41 @@ class WindowClass(QMainWindow):
 		if self.filepath == "":
 			return
 		self.saveTopology()
-
+	
+	def loadTopology(self):
+		filepath = QFileDialog.getSaveFileName(filter="Topology file (*.npgi)")[0]
+		if filepath == "":
+			return
+		topo = file_export.load_NPGI_file(filepath)
+		hosts: list[dict] = topo["TOPO"]["MININET"]["HOSTS"]
+		positions: dict = topo["POSITIONS"]
+		scene: SceneClass = self.mainWidget.view.scene
+		scene.clear()
+		hosts_without_pos = []
+		for h in hosts:
+			name, hostInterfaces = h["ID"], h["INTERFACES"]
+			pos = positions.get(name, None)
+			if pos is None:
+				pos = QPointF(0.0, 0.0)
+				hosts_without_pos.append(name)
+			else:
+				pos = QPointF(pos[0], pos[1])
+			scene.addNode(name, pos, {"INTERFACES": hostInterfaces})
 		
+		# Adiciona arestas
+		connections = topo["TOPO"]["CONNECTIONS"]
+		for c in connections:
+			u, ui, v, vi = c["IN/OUT"], c["IN/OUTIFACE"], c["OUT/IN"], c["OUT/INIFACE"]
+			uobj, vobj = scene.getNode(u)["obj"], scene.getNode(v)["obj"]
+			uinfo, vinfo = uobj.nodeInfo, vobj.nodeInfo
+			uiindex = next((index for (index, iface) in enumerate(uinfo["INTERFACES"]) if iface["MAC"] == ui), None)
+			viindex = next((index for (index, iface) in enumerate(vinfo["INTERFACES"]) if iface["MAC"] == vi), None)
+			edgeInfo = {"INTERFACES": [uiindex, viindex]}
+			scene.connectNodes(uobj, vobj, edgeInfo)
+		self.filepath = filepath
+
+
+
 
 class MainWidget(QWidget):
 	def __init__(self):
@@ -149,19 +182,6 @@ class MainWidget(QWidget):
 		layout.addWidget(self.editMenu)
 		layout.addWidget(self.view)
 		self.setLayout(layout)
-
-num = 20
-
-class TestWidget(QWidget):
-	def __init__(self, w) -> None:
-		super().__init__()
-		global num
-		layout = QVBoxLayout()
-		for i in range(1, num):
-			layout.addWidget(QLabel(f"Teste {i} label"))
-		layout.addWidget(w)
-		self.setLayout(layout)
-		num += 1
 
 
 class EditMenu(QWidget):
@@ -498,6 +518,10 @@ class SceneClass(QGraphicsScene):
 			self.removeEdge(edge)
 		self.netgraph.remove_node(node.getName())
 		self.removeItem(node)
+
+	def clear(self):
+		super(SceneClass, self).clear()
+		self.netgraph = nx.Graph()
 
 
 class Node(QGraphicsEllipseItem):

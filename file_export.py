@@ -97,3 +97,9 @@ def generate_NPGI_file(G: nx.graph, filepath: str):
 
 	with open(filepath, "w") as fp:
 		json.dump(npgi, fp, indent=4)
+
+def load_NPGI_file(filepath: str):
+	npgi: dict
+	with open(filepath, "r") as fp:
+		npgi = json.load(fp)
+	return npgi
