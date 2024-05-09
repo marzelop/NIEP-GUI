@@ -152,30 +152,51 @@ class WindowClass(QMainWindow):
 		positions: dict = topo["POSITIONS"]
 		scene: SceneClass = self.mainWidget.view.scene
 		scene.clear()
-		hosts_without_pos = []
+		nodes_without_pos = []
 		for h in hosts:
 			name, hostInterfaces = h["ID"], h["INTERFACES"]
 			pos = positions.get(name, None)
 			if pos is None:
 				pos = QPointF(0.0, 0.0)
-				hosts_without_pos.append(name)
+				nodes_without_pos.append(name)
 			else:
 				pos = QPointF(pos[0], pos[1])
-			scene.addNode(name, pos, {"INTERFACES": hostInterfaces})
+			scene.addNode(name, pos, "Host", {"INTERFACES": hostInterfaces})
+		
+		for s in topo["TOPO"]["MININET"]["SWITCHES"]:
+			name = s
+			pos = positions.get(name, None)
+			if pos is None:
+				pos = QPointF(0.0, 0.0)
+				nodes_without_pos.append(name)
+			else:
+				pos = QPointF(pos[0], pos[1])
+			scene.addNode(name, pos, "Switch", {})
+		
+		for c in topo["TOPO"]["MININET"]["CONTROLLERS"]:
+			name, ip, port = c["ID"], c["IP"], c["PORT"]
+			pos = positions.get(name, None)
+			if pos is None:
+				pos = QPointF(0.0, 0.0)
+				nodes_without_pos.append(name)
+			else:
+				pos = QPointF(pos[0], pos[1])
+			scene.addNode(name, pos, "Controller", {"IP": ip, "PORT": port})
 		
 		# Adiciona arestas
 		connections = topo["TOPO"]["CONNECTIONS"]
 		for c in connections:
-			u, ui, v, vi = c["IN/OUT"], c["IN/OUTIFACE"], c["OUT/IN"], c["OUT/INIFACE"]
+			u, ui, v, vi = c["IN/OUT"], c.get("IN/OUTIFACE", None), c["OUT/IN"], c.get("OUT/INIFACE", None)
 			uobj, vobj = scene.getNode(u)["obj"], scene.getNode(v)["obj"]
 			uinfo, vinfo = uobj.nodeInfo, vobj.nodeInfo
-			uiindex = next((index for (index, iface) in enumerate(uinfo["INTERFACES"]) if iface["MAC"] == ui), None)
-			viindex = next((index for (index, iface) in enumerate(vinfo["INTERFACES"]) if iface["MAC"] == vi), None)
+			uiindex, viindex = None, None
+			if uobj.hasInterface():
+				uiindex = next((index for (index, iface) in enumerate(uinfo["INTERFACES"]) if iface["MAC"] == ui), None)
+			if vobj.hasInterface():
+				viindex = next((index for (index, iface) in enumerate(vinfo["INTERFACES"]) if iface["MAC"] == vi), None)
 			edgeInfo = {"INTERFACES": [uiindex, viindex]}
 			scene.connectNodes(uobj, vobj, edgeInfo)
 		self.filepath = filepath
-
-
 
 
 class MainWidget(QWidget):
@@ -195,13 +216,21 @@ class EditMenu(QWidget):
 		layout = QVBoxLayout()
 		self.options = QListWidget()
 		self.elementViewer = ElementViewer()
+		self.creationOptions = CreationOptions()
+		self.scene: SceneClass | None = None
 		QListWidgetItem("test1", self.options)
 		QListWidgetItem("test2", self.options)
 		QListWidgetItem("test3", self.options)
 		layout.addWidget(self.options)
+		layout.addWidget(self.creationOptions)
 		layout.addWidget(self.elementViewer.scroll)
 		self.setMinimumWidth(200)
 		self.setLayout(layout)
+	
+	def setScene(self, scene: SceneClass):
+		self.elementViewer.setScene(scene)
+		self.creationOptions.setScene(scene)
+		self.scene = scene
 
 
 class ElementViewer(QWidget):
@@ -234,17 +263,28 @@ class ElementViewer(QWidget):
 			self.scroll.setWidget(None)
 
 	def setNode(self, node: Node):
+		setFunctions = {
+			"Host": self.setHost,
+			"Switch": self.setSwitch,
+			"Controller": self.setController
+		}
+		f = setFunctions[node.type]
 		nodeName = node.getName()
-		nodeInfo = self.getNodeFromScene(nodeName)["info"]
-
 		layout = self.layout()
 		layout.setSpacing(0)
 
-		nameLabel = QLabel("Node")
+		nameLabel = QLabel(node.type)
 		nameLabel.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 		nameEdit = NodeNameEditor(nodeName, self.scene)
 		layout.addWidget(nameLabel)
 		layout.addWidget(nameEdit)
+
+		f(node)
+
+	def setHost(self, node: Node):
+		nodeInfo = node.nodeInfo
+
+		layout = self.layout()
 
 		for i, interface in enumerate(nodeInfo["INTERFACES"]):
 			ilabel = QLabel(f"Interface {i+1}:")
@@ -256,6 +296,18 @@ class ElementViewer(QWidget):
 		newInterfaceButton.setToolTip("Add new interface")
 		newInterfaceButton.clicked.connect(self.addInterface)
 		layout.addWidget(newInterfaceButton)
+	
+	def setSwitch(self, node: Node):
+		pass
+
+	def setController(self, node: Node):
+		nodeInfo = node.nodeInfo
+
+		layout = self.layout()
+		IPEditor = ElementLineEditor(nodeInfo, "IP")
+		portEditor = ElementLineEditor(nodeInfo, "PORT")
+		layout.addWidget(IPEditor)
+		layout.addWidget(portEditor)
 	
 	def addInterface(self):
 		node: Node = self.element
@@ -269,8 +321,7 @@ class ElementViewer(QWidget):
 		layout.addWidget(ilabel)
 		for k in iface.keys():
 			layout.addWidget(ElementLineEditor(iface, k))
-		layout.addWidget(button)
-		
+		layout.addWidget(button)		
 
 	def setEdge(self, edge: Edge):
 		layout = self.layout()
@@ -288,10 +339,10 @@ class ElementViewer(QWidget):
 
 		edgeInterfaces = edge.edgeInfo["INTERFACES"]
 		for i, n in enumerate(nodes):
-			ni = n.nodeInfo["INTERFACES"]
-			layout.addWidget(QLabel(f"{n.getName()} interface:"))
-			layout.addWidget(InterfaceComboSelector(n, edge))
-
+			if n.hasInterface():
+				ni = n.nodeInfo["INTERFACES"]
+				layout.addWidget(QLabel(f"{n.getName()} interface:"))
+				layout.addWidget(InterfaceComboSelector(n, edge))
 
 	def setScene(self, scene: SceneClass):
 		self.scene = scene
@@ -330,6 +381,7 @@ class NodeNameEditor(QWidget):
 			return
 		self.nodeName = newName
 
+
 class ElementLineEditor(QWidget):
 	def __init__(self, modDict: dict, modKey: str):
 		super(ElementLineEditor, self).__init__()
@@ -344,6 +396,7 @@ class ElementLineEditor(QWidget):
 		layout.addWidget(keyEdit)
 		self.setLayout(layout)
 
+
 class InterfaceComboSelector(QComboBox):
 	def __init__(self, node: Node, edge: Edge):
 		super(InterfaceComboSelector, self).__init__()
@@ -354,6 +407,31 @@ class InterfaceComboSelector(QComboBox):
 			self.addItem(f"{j} - {ni[j-1]['MAC']}")
 		self.setCurrentIndex(edge.getNodeInterfaceIndex(node))
 		self.currentIndexChanged.connect(lambda: self.edge.updateNodeInterface(self.node, self.currentIndex()))
+
+
+class CreationOptions(QWidget):
+	class NodeTypeOptionButton(QPushButton):
+		def __init__(self, text: str, parent: CreationOptions):
+			super().__init__(text)
+			self.p = parent
+			self.clicked.connect(lambda: self.p.scene.setNewNodeType(self.text()))
+
+	def __init__(self):
+		super(CreationOptions, self).__init__()
+		self.scene: SceneClass = None
+		options = {
+			"Host": (None),
+			"Switch": (None),
+			"Controller": (None)
+		}
+		layout = QHBoxLayout()
+		for k, v in options.items():
+			button = self.NodeTypeOptionButton(k, self)
+			layout.addWidget(button)
+		self.setLayout(layout)
+
+	def setScene(self, scene: SceneClass):
+		self.scene = scene
 
 
 class ViewClass(QGraphicsView):
@@ -381,12 +459,13 @@ class SceneClass(QGraphicsScene):
 		self.grid = 40
 		self.toolMode = ToolMode.SELECT
 		self.netgraph = nx.Graph()
-		editMenu.elementViewer.setScene(self)
+		editMenu.setScene(self)
 		self.ipv4gen = createIPv4Generator()
 		self.macaddrgen = createMACAddrGenerator()
+		self.newNodeType = "Host"
 
 		self.onclick = None
-		self.nodeNameGenerators = self.createNodeNameGenerators(["Host", "VNF"])
+		self.nodeNameGenerators = self.createNodeNameGenerators(["Host", "Switch", "Controller"])
 		self.tools = {
 			ToolMode.SELECT.value: (None, None),
 			ToolMode.NEW.value: (self.setToolNew, self.unsetToolNew),
@@ -438,8 +517,8 @@ class SceneClass(QGraphicsScene):
 	def getNewMACaddr(self):
 		return next(self.macaddrgen)
 	
-	def addNode(self, id: str, position: QPointF, nodeInfo: dict = {}) -> Node:
-		node = Node(id, nodeInfo)
+	def addNode(self, id: str, position: QPointF, type: str, nodeInfo: dict = {}) -> Node:
+		node = Node(id, type, nodeInfo)
 		self.netgraph.add_node(id, obj=node, info=nodeInfo)
 		node.setPos(position)
 		self.addItem(node)
@@ -458,10 +537,19 @@ class SceneClass(QGraphicsScene):
 		return True
 	
 	def addDefaultHostNode(self, position: QPointF) -> Node:
-		return self.addNode(self.getNodeName("Host"), position, {
+		return self.addNode(self.getNodeName("Host"), position, "Host", {
 			"INTERFACES": [
 				{"IP": self.getNewIPv4addr(), "MAC": self.getNewMACaddr()},
 			]})
+	
+	def addDefaultSwitchNode(self, position: QPointF) -> Node:
+		return self.addNode(self.getNodeName("Switch"), position, "Switch", {})
+	
+	def addDefaultControllerNode(self, position: QPointF) -> Node:
+		return self.addNode(self.getNodeName("Controller"), position, "Controller", {
+				"IP": self.getNewIPv4addr(),
+				"PORT": "3000"
+			})
 	
 	def setToolMode(self, toolMode):
 		unsetf = self.tools[self.toolMode.value][1]
@@ -483,7 +571,16 @@ class SceneClass(QGraphicsScene):
 		self.clearSelection()
 
 	def createNodeAtCursor(self, event: QGraphicsSceneMouseEvent):
-		self.addDefaultHostNode(event.scenePos())
+		nodeFactories = {
+			"Host": self.addDefaultHostNode,
+			"Switch": self.addDefaultSwitchNode,
+			"Controller": self.addDefaultControllerNode
+		}
+		f = nodeFactories[self.newNodeType]
+		f(event.scenePos())
+
+	def setNewNodeType(self, type: str):
+		self.newNodeType = type
 
 	def connectNodes(self, u: Node, v: Node, edgeInfo={}) -> Edge:
 		if self.netgraph.has_edge(u.getName(), v.getName()):
@@ -506,7 +603,6 @@ class SceneClass(QGraphicsScene):
 		name = next(self.nodeNameGenerators[nodeType])
 		while (name in self.netgraph.nodes): # Prevents duplicates
 			name = next(self.nodeNameGenerators[nodeType])
-		print(name)
 		return name
 	
 	def remove(self, obj: Node | Edge):
@@ -534,7 +630,12 @@ class SceneClass(QGraphicsScene):
 
 
 class Node(QGraphicsEllipseItem):
-	def __init__(self, id: str, nodeInfo: dict = {}):
+	nodeColorTable = {
+		"Host": QColor(35, 158, 207),
+		"Switch": QColor(228, 240, 122),
+		"Controller": QColor(56, 207, 96),
+	}
+	def __init__(self, id: str, type: str, nodeInfo: dict = {}):
 		# Using -NODE_RAD for the x and y of the bounding rectangle aligns the rectangle at the center of the node
 		super(Node, self).__init__(-NODE_RAD, -NODE_RAD, 2*NODE_RAD, 2*NODE_RAD)
 
@@ -542,13 +643,14 @@ class Node(QGraphicsEllipseItem):
 		self.text = QGraphicsTextItem(id, parent=self)
 		self.setName(id)
 		self.nodeInfo = nodeInfo
+		self.type = type
 		
 		self.edges: list[Edge] = []
 		
 		self.setFlag(QGraphicsItem.ItemIsMovable)
 		self.setFlag(QGraphicsItem.ItemIsSelectable)
 		self.setZValue(1)
-		self.setBrush(QColor(35, 158, 207))
+		self.setBrush(self.nodeColorTable[type])
 	
 	def getName(self) -> str:
 		return self.text.toPlainText()
@@ -588,6 +690,9 @@ class Node(QGraphicsEllipseItem):
 
 	def removeEdge(self, edge: Edge):
 		self.edges.remove(edge)
+	
+	def hasInterface(self):
+		return self.type == "Host"
 
 	
 class Edge(QGraphicsLineItem):

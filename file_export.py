@@ -9,6 +9,11 @@ def add_default_extension(filepath: str, extension: str):
 def get_filename_no_extension(filepath: str):
 	return filepath.split("/")[-1].split(".")[0]
 
+def has_iface(node):
+	if (node.type == "Host"):
+		return True
+	return False
+
 # Topology JSON generator/loader
 
 def get_VMs(G: nx.Graph):
@@ -22,15 +27,23 @@ def get_SFCs(G: nx.Graph):
 
 def get_hosts(G: nx.Graph):
 	hosts = []
-	for node in G.nodes:
+	for node in filter(lambda n: G.nodes[n]["obj"].type == "Host", G.nodes):
 		hosts.append({"ID": node, "INTERFACES": G.nodes[node]["info"]["INTERFACES"]})
 	return hosts
 
 def get_switches(G: nx.Graph):
-	return []
+	switches = []
+	for node in filter(lambda n: G.nodes[n]["obj"].type == "Switch", G.nodes):
+		switches.append(node)
+	return switches
 
 def get_controllers(G: nx.Graph):
-	return []
+	controllers = []
+	for node in filter(lambda n: G.nodes[n]["obj"].type == "Controller", G.nodes):
+		obj = G.nodes[node]["obj"]
+		controllers.append({"ID": node, "IP": obj.nodeInfo["IP"], "PORT": obj.nodeInfo["PORT"]})
+
+	return controllers
 
 def get_OVswitches(G: nx.Graph):
 	return []
@@ -46,18 +59,21 @@ def get_mininet(G: nx.Graph):
 def get_connections(G: nx.Graph):
 	connections = []
 	for e in G.edges:
-		u, v = e
-		ifaces = G.edges[e]['info']['INTERFACES']
 		edgeobj = G.edges[e]['obj']
-		print(edgeobj)
-		print(edgeobj.nodes)
-		print(ifaces)
-		connection = {
-			"IN/OUT": u,
-			"IN/OUTIFACE": edgeobj.nodes[0].nodeInfo["INTERFACES"][ifaces[0]]["MAC"],
-			"OUT/IN": v,
-			"OUT/INIFACE": edgeobj.nodes[1].nodeInfo["INTERFACES"][ifaces[1]]["MAC"]
-		}
+		u, v = e
+		if u == edgeobj.nodes[0].getName():
+			uobj, vobj = edgeobj.nodes
+		else: vobj, uobj = edgeobj.nodes
+		ifaces = G.edges[e]['info']['INTERFACES']
+
+		connection = dict()
+		connection["IN/OUT"] = u
+		if uobj.hasInterface():
+			connection["IN/OUTIFACE"] = uobj.nodeInfo["INTERFACES"][ifaces[0]]["MAC"]
+		connection["OUT/IN"] = v
+		if vobj.hasInterface():
+			connection["OUT/INIFACE"] = vobj.nodeInfo["INTERFACES"][ifaces[1]]["MAC"]
+
 		connections.append(connection)
 	return connections
 
