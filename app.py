@@ -11,6 +11,7 @@ import resources_rc
 import itertools
 import sys
 import file_export
+import copy
 from webbrowser import open as webopen
 from socket import inet_ntoa
 
@@ -153,6 +154,7 @@ class WindowClass(QMainWindow):
 		scene: SceneClass = self.mainWidget.view.scene
 		scene.clear()
 		nodes_without_pos = []
+		# Load Hosts
 		for h in hosts:
 			name, hostInterfaces = h["ID"], h["INTERFACES"]
 			pos = positions.get(name, None)
@@ -163,6 +165,7 @@ class WindowClass(QMainWindow):
 				pos = QPointF(pos[0], pos[1])
 			scene.addNode(name, pos, "Host", {"INTERFACES": hostInterfaces})
 		
+		# Load Switches
 		for s in topo["TOPO"]["MININET"]["SWITCHES"]:
 			name = s
 			pos = positions.get(name, None)
@@ -173,6 +176,23 @@ class WindowClass(QMainWindow):
 				pos = QPointF(pos[0], pos[1])
 			scene.addNode(name, pos, "Switch", {})
 		
+		# Load VMS
+		for vm in topo["VMS"]:
+			name = vm["ID"]
+			vminfo = copy.deepcopy(vm)
+			vminfo.pop("ID")
+			for iface in vminfo["INTERFACES"]:
+				if "LINK_MAC" not in iface.keys():
+					iface["LINK_MAC"] = ""
+			pos = positions.get(name, None)
+			if pos is None:
+				pos = QPointF(0.0, 0.0)
+				nodes_without_pos.append(name)
+			else:
+				pos = QPointF(pos[0], pos[1])
+			scene.addNode(name, pos, "VM", vminfo)	
+		
+		# Load Controllers
 		for c in topo["TOPO"]["MININET"]["CONTROLLERS"]:
 			name, ip, port = c["ID"], c["IP"], c["PORT"]
 			pos = positions.get(name, None)
@@ -183,7 +203,19 @@ class WindowClass(QMainWindow):
 				pos = QPointF(pos[0], pos[1])
 			scene.addNode(name, pos, "Controller", {"IP": ip, "PORT": port})
 		
-		# Adiciona arestas
+		for ovs in topo["TOPO"]["MININET"]["OVSWITCHES"]:
+			name, ctrl = ovs["ID"], ovs["CONTROLLER"]
+			ctrlobj = None if ctrl is None else scene.getNode(ctrl)['obj']
+			pos = positions.get(name, None)
+			if pos is None:
+				pos = QPointF(0.0, 0.0)
+				nodes_without_pos.append(name)
+			else:
+				pos = QPointF(pos[0], pos[1])
+			ovsnode = scene.addNode(name, pos, "OVSwitch", {"CONTROLLER": ctrlobj})
+			scene.connectNodes(ovsnode, ctrlobj)
+		
+		# Load connections
 		connections = topo["TOPO"]["CONNECTIONS"]
 		for c in connections:
 			u, ui, v, vi = c["IN/OUT"], c.get("IN/OUTIFACE", None), c["OUT/IN"], c.get("OUT/INIFACE", None)
@@ -266,7 +298,9 @@ class ElementViewer(QWidget):
 		setFunctions = {
 			"Host": self.setHost,
 			"Switch": self.setSwitch,
-			"Controller": self.setController
+			"Controller": self.setController,
+			"OVSwitch": self.setOVSwitch,
+			"VM": self.setVM
 		}
 		f = setFunctions[node.type]
 		nodeName = node.getName()
@@ -309,6 +343,31 @@ class ElementViewer(QWidget):
 		layout.addWidget(IPEditor)
 		layout.addWidget(portEditor)
 	
+	def setOVSwitch(self, node: Node):
+		pass
+
+	def setVM(self, node: Node):
+		nodeInfo = node.nodeInfo
+
+		layout = self.layout()
+		memoryEditor = ElementSpinEditor(nodeInfo, "MEMORY", 1, 4096)
+		vcpuEditor = ElementSpinEditor(nodeInfo, "VCPU", 1, 16)
+		diskEditor = VMDiskEditor(node)
+		managementMACEditor = ElementLineEditor(nodeInfo, "MANAGEMENT_MAC")
+
+		layout.addWidget(memoryEditor)
+		layout.addWidget(vcpuEditor)
+		layout.addWidget(diskEditor)
+		layout.addWidget(managementMACEditor)
+
+		for i, interface in enumerate(nodeInfo["INTERFACES"]):
+			ilabel = QLabel(f"Interface {i+1}:")
+			layout.addWidget(ilabel)
+			for k in interface.keys():
+				layout.addWidget(ElementLineEditor(interface, k))
+
+		
+	
 	def addInterface(self):
 		node: Node = self.element
 		iface = {"IP": None, "MAC": "00:00:00:00:00:00"}
@@ -337,10 +396,8 @@ class ElementViewer(QWidget):
 		layout.addWidget(nameLabel)
 		layout.addWidget(nodesLabel)
 
-		edgeInterfaces = edge.edgeInfo["INTERFACES"]
 		for i, n in enumerate(nodes):
 			if n.hasInterface():
-				ni = n.nodeInfo["INTERFACES"]
 				layout.addWidget(QLabel(f"{n.getName()} interface:"))
 				layout.addWidget(InterfaceComboSelector(n, edge))
 
@@ -392,6 +449,23 @@ class ElementLineEditor(QWidget):
 		keyEdit = QLineEdit(modDict[modKey])
 		keyEdit.setFixedWidth(110)
 		keyEdit.editingFinished.connect(lambda: self.modDict.update({self.modKey: keyEdit.text()}))
+		layout.addWidget(QLabel(f"{modKey.replace('_', ' ')}:"))
+		layout.addWidget(keyEdit)
+		self.setLayout(layout)
+
+
+class ElementSpinEditor(QWidget):
+	def __init__(self, modDict: dict, modKey: str, min: int, max: int):
+		super(ElementSpinEditor, self).__init__()
+		self.modDict = modDict
+		self.modKey = modKey
+
+		layout = QHBoxLayout()
+		keyEdit = QSpinBox()
+		keyEdit.setRange(min, max)
+		keyEdit.setValue(modDict[modKey])
+		keyEdit.setFixedWidth(110)
+		keyEdit.valueChanged.connect(lambda: self.modDict.update({self.modKey: keyEdit.value()}))
 		layout.addWidget(QLabel(f"{modKey}:"))
 		layout.addWidget(keyEdit)
 		self.setLayout(layout)
@@ -409,6 +483,34 @@ class InterfaceComboSelector(QComboBox):
 		self.currentIndexChanged.connect(lambda: self.edge.updateNodeInterface(self.node, self.currentIndex()))
 
 
+class VMDiskEditor(QWidget):
+	def __init__(self, node: Node):
+		super(VMDiskEditor, self).__init__()
+		layout = QHBoxLayout()
+		label = QLabel("DISK:")
+		combo = VMDiskComboSelector(node)
+		layout.addWidget(label)
+		layout.addWidget(combo)
+		self.setLayout(layout)
+
+
+class VMDiskComboSelector(QComboBox):
+	options = [
+		"click-on-osv",
+		"tinycore12",
+	]
+	def __init__(self, node: Node):
+		super(VMDiskComboSelector, self).__init__()
+		self.node = node
+		for option in self.options:
+			self.addItem(option)
+		self.setCurrentIndex(self.options.index(node.nodeInfo["DISK"]))
+		self.currentIndexChanged.connect(self.setVMDisk)
+	
+	def setVMDisk(self):
+		self.node.nodeInfo["DISK"] = self.options[self.currentIndex()]
+
+
 class CreationOptions(QWidget):
 	class NodeTypeOptionButton(QPushButton):
 		def __init__(self, text: str, parent: CreationOptions):
@@ -422,7 +524,9 @@ class CreationOptions(QWidget):
 		options = {
 			"Host": (None),
 			"Switch": (None),
-			"Controller": (None)
+			"Controller": (None),
+			"OVSwitch": (None),
+			"VM": (None),
 		}
 		layout = QHBoxLayout()
 		for k, v in options.items():
@@ -465,7 +569,7 @@ class SceneClass(QGraphicsScene):
 		self.newNodeType = "Host"
 
 		self.onclick = None
-		self.nodeNameGenerators = self.createNodeNameGenerators(["Host", "Switch", "Controller"])
+		self.nodeNameGenerators = self.createNodeNameGenerators(["Host", "Switch", "Controller", "OVSwitch", "VM"])
 		self.tools = {
 			ToolMode.SELECT.value: (None, None),
 			ToolMode.NEW.value: (self.setToolNew, self.unsetToolNew),
@@ -505,8 +609,21 @@ class SceneClass(QGraphicsScene):
 			if len(prevSelNodes) > 0:
 				v = prevSelNodes[0]
 				if self.toolMode == ToolMode.CONNECT:
-					if u != v:
-						self.connectNodes(v, u, {"INTERFACES": [0, 0]})
+					self.connectNodes(v, u, {"INTERFACES": [0, 0]})
+	
+	def validateConnection(self, u: Node, v: Node) -> bool:
+		if u is v or self.netgraph.has_edge(u.getName(), v.getName()):
+			return False
+		validConnectionsTable = {
+			"Host": {"Host", "Switch", "OVSwitch", "VM"},
+			"Switch": {"Host", "VM"},
+			"OVSwitch": {"Host", "VM", "Controller"},
+			"Controller": {"OVSwitch"},
+			"VM": {"Host", "Switch", "OVSwitch", "VM"}
+		}
+		if not v.type in validConnectionsTable[u.type]:
+			return False
+		return True
 		
 	def getToolFunction(self):
 		return self.toolFunctions[self.toolMode.value]
@@ -551,6 +668,24 @@ class SceneClass(QGraphicsScene):
 				"PORT": "3000"
 			})
 	
+	def addDefaultOVSwitchNode(self, position: QPointF) -> Node:
+		return self.addNode(self.getNodeName("OVSwitch"), position, "OVSwitch", {"CONTROLLER": None})
+	
+	def addDefaultVMNode(self, position: QPointF) -> Node:
+		return self.addNode(self.getNodeName("VM"), position, "VM", {
+			"MEMORY": 300,
+			"VCPU": 1,
+			"DISK": "click-on-osv",
+			"MANAGEMENT_MAC": self.getNewMACaddr(),
+			"INTERFACES": [
+				{
+					"ID": "br0",
+					"MAC": self.getNewMACaddr(),
+					"LINK_MAC": ""
+				}
+			]
+		})
+	
 	def setToolMode(self, toolMode):
 		unsetf = self.tools[self.toolMode.value][1]
 		setf = self.tools[toolMode.value][0]
@@ -574,7 +709,9 @@ class SceneClass(QGraphicsScene):
 		nodeFactories = {
 			"Host": self.addDefaultHostNode,
 			"Switch": self.addDefaultSwitchNode,
-			"Controller": self.addDefaultControllerNode
+			"Controller": self.addDefaultControllerNode,
+			"OVSwitch": self.addDefaultOVSwitchNode,
+			"VM": self.addDefaultVMNode
 		}
 		f = nodeFactories[self.newNodeType]
 		f(event.scenePos())
@@ -583,8 +720,13 @@ class SceneClass(QGraphicsScene):
 		self.newNodeType = type
 
 	def connectNodes(self, u: Node, v: Node, edgeInfo={}) -> Edge:
-		if self.netgraph.has_edge(u.getName(), v.getName()):
+		if not self.validateConnection(u, v):
 			return None
+		if u.type == "Controller":
+			u, v = v, u
+		if u.type == "OVSwitch" and v.type == "Controller":
+			self.remove(u.getControllerConnection())
+			u.nodeInfo["CONTROLLER"] = v
 		edge = Edge(u, v, edgeInfo)
 		self.netgraph.add_edge(u.getName(), v.getName(), obj=edge, info=edgeInfo)
 		u.addEdge(edge)
@@ -605,7 +747,9 @@ class SceneClass(QGraphicsScene):
 			name = next(self.nodeNameGenerators[nodeType])
 		return name
 	
-	def remove(self, obj: Node | Edge):
+	def remove(self, obj: Node | Edge | None):
+		if obj is None:
+			return
 		if type(obj) == Node:
 			self.removeNode(obj)
 		else:
@@ -617,7 +761,6 @@ class SceneClass(QGraphicsScene):
 		edge.nodes[1].removeEdge(edge)
 		self.removeItem(edge)
 
-
 	def removeNode(self, node: Node):
 		for edge in list(node.edges):
 			self.removeEdge(edge)
@@ -628,12 +771,17 @@ class SceneClass(QGraphicsScene):
 		super(SceneClass, self).clear()
 		self.netgraph = nx.Graph()
 
+	def hasNode(self, nodeName: str):
+		return self.netgraph.has_node(nodeName)
+
 
 class Node(QGraphicsEllipseItem):
 	nodeColorTable = {
 		"Host": QColor(35, 158, 207),
 		"Switch": QColor(228, 240, 122),
 		"Controller": QColor(56, 207, 96),
+		"OVSwitch": QColor(172, 184, 68),
+		"VM": QColor(40, 55, 168)
 	}
 	def __init__(self, id: str, type: str, nodeInfo: dict = {}):
 		# Using -NODE_RAD for the x and y of the bounding rectangle aligns the rectangle at the center of the node
@@ -689,10 +837,22 @@ class Node(QGraphicsEllipseItem):
 		return super().itemChange(change, value)
 
 	def removeEdge(self, edge: Edge):
+		if edge is self.getControllerConnection():
+			self.nodeInfo["CONTROLLER"] = None
 		self.edges.remove(edge)
 	
 	def hasInterface(self):
-		return self.type == "Host"
+		return self.type in ["Host", "VM"]
+	
+	def getControllerConnection(self) -> Edge | None:
+		if self.type != "OVSwitch":
+			return None
+		for e in self.edges:
+			other = e.getOtherNode(self)
+			if other.type == "Controller":
+				return e
+		return None
+
 
 	
 class Edge(QGraphicsLineItem):
@@ -735,6 +895,13 @@ class Edge(QGraphicsLineItem):
 			return 1
 		else:
 			return -1
+	
+	def getOtherNode(self, node: Node):
+		if node is self.nodes[0]:
+			return self.nodes[1]
+		if node is self.nodes[1]:
+			return self.nodes[0]
+		return None
 
 	def updateNodeInterface(self, node: Node, value: int):
 		ni = self.getNodeIndex(node)

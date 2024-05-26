@@ -17,7 +17,10 @@ def has_iface(node):
 # Topology JSON generator/loader
 
 def get_VMs(G: nx.Graph):
-	return []
+	vms = []
+	for node in filter(lambda n: G.nodes[n]["obj"].type == "VM", G.nodes):
+		vms.append(f"./VMS/{node}.json")
+	return vms
 
 def get_VNFs(G: nx.Graph):
 	return []
@@ -46,7 +49,17 @@ def get_controllers(G: nx.Graph):
 	return controllers
 
 def get_OVswitches(G: nx.Graph):
-	return []
+	ovswitches = []
+	for node in filter(lambda n: G.nodes[n]["obj"].type == "OVSwitch", G.nodes):
+		controller = G.nodes[node]["obj"].nodeInfo["CONTROLLER"]
+		if controller is not None:
+			controller = controller.getName()
+		ovs = {
+			"ID": node,
+			"CONTROLLER": controller
+		}
+		ovswitches.append(ovs)
+	return ovswitches
 
 def get_mininet(G: nx.Graph):
 	mini = dict()
@@ -64,6 +77,8 @@ def get_connections(G: nx.Graph):
 		if u == edgeobj.nodes[0].getName():
 			uobj, vobj = edgeobj.nodes
 		else: vobj, uobj = edgeobj.nodes
+		if uobj.type == "Controller" or vobj.type == "Controller":
+			continue
 		ifaces = G.edges[e]['info']['INTERFACES']
 
 		connection = dict()
@@ -111,12 +126,27 @@ def generate_position_file(G: nx.Graph, filepath: str):
 	with open(filepath, "w") as fp:
 		json.dump(pos, fp, indent=4)
 
+# JSON Definitions
+
+def generate_VM_definitions(G: nx.graph):
+	vms = []
+	for node in G.nodes:
+		nodeobj = G.nodes[node]['obj']
+		if nodeobj.type != "VM":
+			continue
+		vminfo = nodeobj.nodeInfo
+		vm = {"ID": node}
+		vm.update(vminfo)
+		vms.append(vm)
+	return vms
+
 # NPGI file exporter
-		
+
 def generate_NPGI_file(G: nx.graph, filepath: str):
 	npgi = dict()
 	npgi["VERSION"] = "1.0"
 	npgi["TOPO"] = generate_topo_dict(G, filepath)
+	npgi["VMS"] = generate_VM_definitions(G)
 	npgi["POSITIONS"] = generate_position_dict(G)
 
 	with open(add_default_extension(filepath, "npgi"), "w") as fp:
