@@ -1,5 +1,6 @@
 import json
 import networkx as nx
+import copy
 
 def add_default_extension(filepath: str, extension: str):
 	if len(filepath.split("/")[-1].split(".")) == 1:
@@ -134,7 +135,10 @@ def generate_VM_definitions(G: nx.graph):
 		nodeobj = G.nodes[node]['obj']
 		if nodeobj.type != "VM":
 			continue
-		vminfo = nodeobj.nodeInfo
+		vminfo = copy.deepcopy(nodeobj.nodeInfo)
+		for iface in vminfo["INTERFACES"]:
+			if iface["LINK_MAC"] == "":
+				iface.pop("LINK_MAC")
 		vm = {"ID": node}
 		vm.update(vminfo)
 		vms.append(vm)
