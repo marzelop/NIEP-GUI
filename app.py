@@ -1,7 +1,7 @@
 #!./venv/bin/python
 from __future__ import annotations
-from PySide6.QtCore import Qt, QLine, QPointF, QLineF
-from PySide6.QtGui import QFont, QPainter, QColor, QPen, QPainterPath, QAction, QIcon, QTransform, QPalette, QKeySequence
+from PySide6.QtCore import *
+from PySide6.QtGui import *
 from PySide6.QtWidgets import *
 from PySide6.QtWidgets import QWidget
 import networkx as nx
@@ -14,9 +14,12 @@ import file_export
 import copy
 from webbrowser import open as webopen
 from socket import inet_ntoa
+import regexdef
+import os
 
 rad = 5
 NODE_RAD = 50
+userSettings: QSettings = None
 
 class ToolMode(Enum):
 	SELECT=1
@@ -27,7 +30,7 @@ class ToolMode(Enum):
 
 def createNodeNameGenerator(basename: str):
 	for i in itertools.count(1, 1):
-		yield f"{basename} {i}"
+		yield f"{basename}{i}"
 
 def createIPv4Generator():
 	# 0xc0a80001 = 192.168.0.1
@@ -48,6 +51,12 @@ def clearLayout(layout: QLayout):
 	while (item := layout.itemAt(0)) != None:
 		item.widget().deleteLater()
 		layout.removeWidget(item.widget())
+
+def initializeUserSettings():
+	showKeys = ["OVSSingleControllerWarn"]
+	for k in showKeys:
+		if userSettings.value(f"Show/{k}") == None:
+			userSettings.setValue(f"Show/{k}", True)
 
 class WindowClass(QMainWindow):
 	def __init__(self):
@@ -72,7 +81,7 @@ class WindowClass(QMainWindow):
 				"Load": (self.loadTopology, "Ctrl+L"),
 				"Save": (self.saveTopology, "Ctrl+S"),
 				"Save as ...": (self.saveTopologyAs, "Ctrl+Shift+S"),
-				"Export as ...": (lambda: self.export("JSON"), None)
+				"Export as ...": (lambda: self.exportDir(), "Ctrl+E")
 			},
 			"&Help": {
 				"Documentation": (lambda: webopen("https://github.com/marzelop/NIEP-GUI/tree/main/docs"), None),
@@ -181,6 +190,11 @@ class WindowClass(QMainWindow):
 			name = vm["ID"]
 			vminfo = copy.deepcopy(vm)
 			vminfo.pop("ID")
+			if name[-4:] == "@VNF":
+				name = name[0:-4]
+				vminfo["VNF"] = True
+			else: vminfo["VNF"] = False
+
 			for iface in vminfo["INTERFACES"]:
 				if "LINK_MAC" not in iface.keys():
 					iface["LINK_MAC"] = ""
@@ -224,11 +238,147 @@ class WindowClass(QMainWindow):
 			uiindex, viindex = None, None
 			if uobj.hasInterface():
 				uiindex = next((index for (index, iface) in enumerate(uinfo["INTERFACES"]) if iface["MAC"] == ui), None)
+				if u == "Host 2":
+					print("Host 2!!!u")
+					print("Connection " + v)
+					print(ui)
+					print(uinfo["INTERFACES"])
+					print(uiindex)
 			if vobj.hasInterface():
-				viindex = next((index for (index, iface) in enumerate(vinfo["INTERFACES"]) if iface["MAC"] == vi), None)
+				viindex = next((index for (index, iface) in enumerate(vinfo["INTERFACES"]) if iface["MAC"] == vi), None)	
+				if v == "Host 2":
+					print("Host 2!!!v")
+					print("Connection " + u)
+					print(vi)
+					print(vinfo["INTERFACES"])
+					print(viindex)			
 			edgeInfo = {"INTERFACES": [uiindex, viindex]}
+			if (u == "Host 2" and v == "Switch 1") or (v == "Host 2" and u == "Switch 1"):
+				print(edgeInfo)
 			scene.connectNodes(uobj, vobj, edgeInfo)
 		self.filepath = filepath
+
+	def exportDir(self):
+		import json
+		import shutil
+		responseDict = {}
+		dialog = ExportDialog(responseDict)
+		dialog.exec()
+		if dialog.result() == 0:
+			return
+		filepath = responseDict["FILEPATH"]
+		topoid = responseDict["ID"]
+		mode = responseDict["MODE"]
+		zipname = ""
+		if mode == "ZIP":
+			if filepath[-4:] == ".zip":
+				filepath = filepath[:-4]
+			zipname = f"{filepath}.zip"
+		os.mkdir(filepath)
+		os.mkdir(f"{filepath}/VMS")
+		os.mkdir(f"{filepath}/VNFS")
+		scene: SceneClass = self.mainWidget.view.scene
+		topo = file_export.generate_topo_dict(scene.netgraph, "Topology")
+		topo["ID"] = topoid
+		vms = file_export.generate_VM_definitions(scene.netgraph)
+		vnfs = file_export.generate_VNF_definitions(topo)
+		with open(f"{filepath}/{topo['ID']}.json", "w") as fp:
+			json.dump(topo, fp, indent=4)
+		for vm in vms:
+			with open(f"{filepath}/VMS/{vm['ID']}.json", "w") as fp:
+				json.dump(vm, fp, indent=4)
+		for vnf in vnfs:
+			with open(f"{filepath}/VNFS/{vnf['ID']}.json", "w") as fp:
+				json.dump(vnf, fp, indent=4)
+		if mode == "ZIP":
+			shutil.make_archive(filepath, "zip", f"{filepath}/../", filepath)
+
+
+class ExportDialog(QDialog):
+	class FilePathSelector(QWidget):
+		def __init__(self, filepath: str):
+			super().__init__()
+			layout = QHBoxLayout()
+			self.filepath = filepath
+			self.filepathLabel = QLabel()
+			self.setFilepath(filepath)
+			self.filepathLabel.setFixedWidth(250)
+			browseButton = QPushButton("Browse")
+			browseButton.clicked.connect(self.getFilepathDialog)
+			layout.addWidget(self.filepathLabel)
+			layout.addWidget(browseButton)	
+			self.setLayout(layout)
+		
+		def getFilepathDialog(self):
+			filename = QFileDialog.getSaveFileName(filter="")[0]
+			if filename != "":
+				self.setFilepath(filename)
+			return filename
+		
+		def getFilepath(self):
+			return self.filepath
+		
+		def setFilepath(self, filepath):
+			self.filepath = filepath
+			metrics = QFontMetrics(self.filepathLabel.font())
+			text = metrics.elidedText(filepath, Qt.TextElideMode.ElideLeft, self.filepathLabel.width())
+			self.filepathLabel.setText(text)
+			
+		
+	class TopoNameEditor(QWidget):
+		def __init__(self):
+			super().__init__()
+			layout = QHBoxLayout()
+			label = QLabel("Topology ID:")
+			self.toponameedit = QLineEdit("Topology")
+			layout.addWidget(label)
+			layout.addWidget(self.toponameedit)
+			self.setLayout(layout)
+		
+		def getTopoName(self):
+			return self.toponameedit.text()
+
+	def __init__(self, response: dict):
+		super().__init__()
+		layout = QVBoxLayout()
+		self.response = response
+		self.setModal(True)
+		self.filepathSelector = self.FilePathSelector("")
+		self.toponame = self.TopoNameEditor()
+		self.exportMode = QComboBox()
+		self.exportMode.addItems(["Directory", "ZIP file"])
+		exportButton = QPushButton("Export")
+		exportButton.clicked.connect(self.export)
+		layout.addWidget(self.filepathSelector)
+		layout.addWidget(self.toponame)
+		layout.addWidget(self.exportMode)
+		layout.addWidget(exportButton)
+		self.setLayout(layout)
+	
+	def export(self):
+		response = self.response
+		topoName = self.toponame.getTopoName()
+		filepath = self.filepathSelector.getFilepath()
+		errorMessages = []
+		if topoName == "":
+			errorMessages.append("Invalid topology ID.")
+		if filepath == "":
+			errorMessages.append("Invalid file destination.")
+		if len(errorMessages) > 0:
+			return errorMessages
+		if self.exportMode.currentText() == "ZIP file":
+			filepath = file_export.add_default_extension(filepath, "zip")
+		mode = {
+			"Directory": "DIR",
+			"ZIP file": "ZIP"
+		}
+		mode = mode[self.exportMode.currentText()]
+		response.update({
+			"ID": topoName,
+			"FILEPATH": filepath,
+			"MODE": mode
+		})
+		self.accept()
 
 
 class MainWidget(QWidget):
@@ -320,11 +470,15 @@ class ElementViewer(QWidget):
 
 		layout = self.layout()
 
+		ifaceKeyValidatorRegexTable = {
+			"IP": regexdef.ipv4,
+			"MAC": regexdef.mac
+		}
 		for i, interface in enumerate(nodeInfo["INTERFACES"]):
 			ilabel = QLabel(f"Interface {i+1}:")
 			layout.addWidget(ilabel)
 			for k in interface.keys():
-				layout.addWidget(ElementLineEditor(interface, k))
+				layout.addWidget(ElementLineEditor(interface, k, ifaceKeyValidatorRegexTable[k]))
 		
 		newInterfaceButton = QPushButton(QIcon(":add.png"), "")
 		newInterfaceButton.setToolTip("Add new interface")
@@ -350,11 +504,13 @@ class ElementViewer(QWidget):
 		nodeInfo = node.nodeInfo
 
 		layout = self.layout()
+		vnfCheckBox = CheckBoxKeyEditor(nodeInfo, "VNF")
 		memoryEditor = ElementSpinEditor(nodeInfo, "MEMORY", 1, 4096)
 		vcpuEditor = ElementSpinEditor(nodeInfo, "VCPU", 1, 16)
 		diskEditor = VMDiskEditor(node)
 		managementMACEditor = ElementLineEditor(nodeInfo, "MANAGEMENT_MAC")
 
+		layout.addWidget(vnfCheckBox)
 		layout.addWidget(memoryEditor)
 		layout.addWidget(vcpuEditor)
 		layout.addWidget(diskEditor)
@@ -422,9 +578,10 @@ class NodeNameEditor(QWidget):
 		super(NodeNameEditor, self).__init__()
 		self.nodeName = nodeName
 		self.scene = scene
-
+		validator = QRegularExpressionValidator(regexdef.defaultNaming)
 		layout = QHBoxLayout()
 		nameEdit = QLineEdit(nodeName)
+		nameEdit.setValidator(validator)
 		nameEdit.editingFinished.connect(self.updateNodeName)
 		layout.addWidget(QLabel(f"Name:"))
 		layout.addWidget(nameEdit)
@@ -433,20 +590,30 @@ class NodeNameEditor(QWidget):
 	
 	def updateNodeName(self):
 		newName = self.nameEdit.text()
+		if newName == "":
+			self.nameEdit.setText(self.nodeName)
+			return
+		if newName == self.nodeName: return # Prevents duplicate error message box because QLineEdit.setText triggers QLineEdit.editingFinished
 		if not self.scene.renameNode(self.nodeName, newName):
 			self.nameEdit.setText(self.nodeName)
+			msg = QMessageBox(QMessageBox.Icon.Warning, "Duplicate node name", f"Renaming {self.nodeName} to {newName} failed beacause a node's name should be unique and a node named {newName} already exists.")
+			msg.exec()
 			return
 		self.nodeName = newName
 
 
 class ElementLineEditor(QWidget):
-	def __init__(self, modDict: dict, modKey: str):
+	def __init__(self, modDict: dict, modKey: str, validRegex: str = None):
 		super(ElementLineEditor, self).__init__()
 		self.modDict = modDict
 		self.modKey = modKey
 
 		layout = QHBoxLayout()
 		keyEdit = QLineEdit(modDict[modKey])
+		if validRegex is not None:
+			regex = QRegularExpression(validRegex)
+			validator = QRegularExpressionValidator(regex)
+			keyEdit.setValidator(validator)
 		keyEdit.setFixedWidth(110)
 		keyEdit.editingFinished.connect(lambda: self.modDict.update({self.modKey: keyEdit.text()}))
 		layout.addWidget(QLabel(f"{modKey.replace('_', ' ')}:"))
@@ -469,6 +636,22 @@ class ElementSpinEditor(QWidget):
 		layout.addWidget(QLabel(f"{modKey}:"))
 		layout.addWidget(keyEdit)
 		self.setLayout(layout)
+
+
+class CheckBoxKeyEditor(QCheckBox):
+	def __init__(self, modDict: dict, modKey: str, negateBool: bool = False):
+		super(CheckBoxKeyEditor, self).__init__(modKey)
+
+		self.modDict = modDict
+		self.modKey = modKey
+		self.negate = negateBool # Negates the output
+
+		self.setChecked(self.modDict[self.modKey] != negateBool)
+
+		self.stateChanged.connect(self.updateKey)
+	
+	def updateKey(self):
+		self.modDict[self.modKey] = self.isChecked() != self.negate
 
 
 class InterfaceComboSelector(QComboBox):
@@ -673,6 +856,7 @@ class SceneClass(QGraphicsScene):
 	
 	def addDefaultVMNode(self, position: QPointF) -> Node:
 		return self.addNode(self.getNodeName("VM"), position, "VM", {
+			"VNF": False,
 			"MEMORY": 300,
 			"VCPU": 1,
 			"DISK": "click-on-osv",
@@ -725,7 +909,15 @@ class SceneClass(QGraphicsScene):
 		if u.type == "Controller":
 			u, v = v, u
 		if u.type == "OVSwitch" and v.type == "Controller":
-			self.remove(u.getControllerConnection())
+			oldControllerConnection = u.getControllerConnection()
+			if oldControllerConnection != None:
+				if userSettings.value("Show/OVSSingleControllerWarn") == True:
+					msg = QMessageBox(QMessageBox.Icon.Information, "OVSwitch with multiple controllers", f"An OVSwitch should connect to one, and only one controller. The previous controller ({oldControllerConnection.getOtherNode(u).getName()}) will be disconnected from the OVSwitch ({u.getName()}) for this reason.")
+					dontShowAgain = QCheckBox("Don't show this again")
+					msg.setCheckBox(dontShowAgain)
+					msg.exec()
+					userSettings.setValue("Show/OVSSingleControllerWarn", not dontShowAgain.isChecked())
+				self.remove(u.getControllerConnection())
 			u.nodeInfo["CONTROLLER"] = v
 		edge = Edge(u, v, edgeInfo)
 		self.netgraph.add_edge(u.getName(), v.getName(), obj=edge, info=edgeInfo)
@@ -910,25 +1102,16 @@ class Edge(QGraphicsLineItem):
 	def getNodeInterfaceIndex(self, node: Node):
 		return self.edgeInfo["INTERFACES"][self.getNodeIndex(node)]
 
-
-class Path(QGraphicsPathItem):
-	def __init__(self, path, scene):
-		super(Path, self).__init__(path)
-		for i in range(path.elementCount()):
-			node = Node(self, i)
-			node.setPos(QPointF(path.elementAt(i)))
-			scene.addItem(node)
-		self.setPen(QPen(Qt.red, 1.75))        
-
-	def updateElement(self, index, pos):
-		path = self.path()
-		path.setElementPositionAt(index, pos.x(), pos.y())
-		self.setPath(path)
-
 if __name__ == "__main__":
 	app = QApplication()
+	app.setOrganizationName("NIEP")
+	app.setApplicationName("GUI")
+	app.setApplicationDisplayName("NIEP-GUI")
 
+	userSettings = QSettings("NIEP", "GUI")
+	initializeUserSettings()
 	window = WindowClass()
 	window.show()
 
 	app.exec()
+	userSettings.sync()

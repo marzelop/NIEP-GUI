@@ -17,14 +17,30 @@ def has_iface(node):
 
 # Topology JSON generator/loader
 
-def get_VMs(G: nx.Graph):
+'''def get_VMs(G: nx.Graph):
 	vms = []
 	for node in filter(lambda n: G.nodes[n]["obj"].type == "VM", G.nodes):
-		vms.append(f"./VMS/{node}.json")
+		if G.nodes[node]["info"]["VNF"]:
+			vms.append(f"./VMS/{node}@VNF.json")
+		else:	
+			vms.append(f"./VMS/{node}.json")
 	return vms
 
 def get_VNFs(G: nx.Graph):
-	return []
+	vnfs = []
+	for node in filter(lambda n: G.nodes[n]["obj"].type == "VM" and G.nodes[n]["info"]["VNF"], G.nodes):
+		vnfs.append(f"./VNFS/{node}.json")
+	return vnfs'''
+
+def get_VMs_and_VNFs(G: nx.Graph):
+	vms = []
+	vnfs = []
+	for node in filter(lambda n: G.nodes[n]["obj"].type == "VM", G.nodes):
+		if G.nodes[node]["info"]["VNF"]:
+			vnfs.append(f"./VNFS/{node}.json")
+		else:	
+			vms.append(f"./VMS/{node}.json")
+	return vms, vnfs
 
 def get_SFCs(G: nx.Graph):
 	return []
@@ -75,8 +91,10 @@ def get_connections(G: nx.Graph):
 	for e in G.edges:
 		edgeobj = G.edges[e]['obj']
 		u, v = e
+		ui, vi = 1, 0
 		if u == edgeobj.nodes[0].getName():
 			uobj, vobj = edgeobj.nodes
+			ui, vi = 0, 1
 		else: vobj, uobj = edgeobj.nodes
 		if uobj.type == "Controller" or vobj.type == "Controller":
 			continue
@@ -84,11 +102,17 @@ def get_connections(G: nx.Graph):
 
 		connection = dict()
 		connection["IN/OUT"] = u
+		print(u)
+		print(uobj.getName())
+		print(v)
+		print(vobj.getName())
+		print(ifaces)
+		print()
 		if uobj.hasInterface():
-			connection["IN/OUTIFACE"] = uobj.nodeInfo["INTERFACES"][ifaces[0]]["MAC"]
+			connection["IN/OUTIFACE"] = uobj.nodeInfo["INTERFACES"][ifaces[ui]]["MAC"]
 		connection["OUT/IN"] = v
 		if vobj.hasInterface():
-			connection["OUT/INIFACE"] = vobj.nodeInfo["INTERFACES"][ifaces[1]]["MAC"]
+			connection["OUT/INIFACE"] = vobj.nodeInfo["INTERFACES"][ifaces[vi]]["MAC"]
 
 		connections.append(connection)
 	return connections
@@ -97,8 +121,7 @@ def generate_topo_dict(G: nx.Graph, filepath: str):
 	topo = dict()
 	# Only to guarantee a valid topology, resulting file should never get this ID unless the user wants to
 	topo["ID"] = get_filename_no_extension(filepath)
-	topo["VMS"] = get_VMs(G)
-	topo["VNFS"] = get_VNFs(G)
+	topo["VMS"], topo["VNFS"] = get_VMs_and_VNFs(G)
 	topo["SFCS"] = get_SFCs(G)
 	topo["MININET"] = get_mininet(G)
 	topo["CONNECTIONS"] = get_connections(G)
@@ -129,7 +152,7 @@ def generate_position_file(G: nx.Graph, filepath: str):
 
 # JSON Definitions
 
-def generate_VM_definitions(G: nx.graph):
+def generate_VM_definitions(G: nx.Graph):
 	vms = []
 	for node in G.nodes:
 		nodeobj = G.nodes[node]['obj']
@@ -139,10 +162,25 @@ def generate_VM_definitions(G: nx.graph):
 		for iface in vminfo["INTERFACES"]:
 			if iface["LINK_MAC"] == "":
 				iface.pop("LINK_MAC")
-		vm = {"ID": node}
+		if vminfo["VNF"]:
+			vm = {"ID": f"{node}@VNF"}
+		else: vm = {"ID": f"{node}"}
+		vminfo.pop("VNF")
 		vm.update(vminfo)
 		vms.append(vm)
 	return vms
+
+def generate_VNF_definitions(topo: dict):
+	vnfs = []
+	for vnf in topo["VNFS"]:
+		id = get_filename_no_extension(vnf)
+		vm = f"./VMS/{id}@VNF.json"
+		vnfs.append({
+			"ID": id,
+			"VM": vm
+		})
+
+	return vnfs
 
 # NPGI file exporter
 
