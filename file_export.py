@@ -102,12 +102,6 @@ def get_connections(G: nx.Graph):
 
 		connection = dict()
 		connection["IN/OUT"] = u
-		print(u)
-		print(uobj.getName())
-		print(v)
-		print(vobj.getName())
-		print(ifaces)
-		print()
 		if uobj.hasInterface():
 			connection["IN/OUTIFACE"] = uobj.nodeInfo["INTERFACES"][ifaces[ui]]["MAC"]
 		connection["OUT/IN"] = v

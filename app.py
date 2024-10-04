@@ -1,6 +1,7 @@
 #!./venv/bin/python
 from __future__ import annotations
 from PySide6.QtCore import *
+from PySide6.QtCore import Qt
 from PySide6.QtGui import *
 from PySide6.QtWidgets import *
 from PySide6.QtWidgets import QWidget
@@ -87,6 +88,10 @@ class WindowClass(QMainWindow):
 				"Documentation": (lambda: webopen("https://github.com/marzelop/NIEP-GUI/tree/main/docs"), None),
 				"Report a bug": (None, None),
 				"Troubleshooting": (None, None)
+			},
+			"&Run": {
+				"Run topology": (self.runTopology, "Ctrl+R"),
+				"Kill topology": (self.killTopology, "Ctrl+K")
 			}
 		}
 		self.actions = []
@@ -238,25 +243,33 @@ class WindowClass(QMainWindow):
 			uiindex, viindex = None, None
 			if uobj.hasInterface():
 				uiindex = next((index for (index, iface) in enumerate(uinfo["INTERFACES"]) if iface["MAC"] == ui), None)
-				if u == "Host 2":
-					print("Host 2!!!u")
-					print("Connection " + v)
-					print(ui)
-					print(uinfo["INTERFACES"])
-					print(uiindex)
 			if vobj.hasInterface():
-				viindex = next((index for (index, iface) in enumerate(vinfo["INTERFACES"]) if iface["MAC"] == vi), None)	
-				if v == "Host 2":
-					print("Host 2!!!v")
-					print("Connection " + u)
-					print(vi)
-					print(vinfo["INTERFACES"])
-					print(viindex)			
+				viindex = next((index for (index, iface) in enumerate(vinfo["INTERFACES"]) if iface["MAC"] == vi), None)		
 			edgeInfo = {"INTERFACES": [uiindex, viindex]}
-			if (u == "Host 2" and v == "Switch 1") or (v == "Host 2" and u == "Switch 1"):
-				print(edgeInfo)
 			scene.connectNodes(uobj, vobj, edgeInfo)
 		self.filepath = filepath
+
+	def runTopology(self):
+		import requests
+		filepath = QFileDialog.getOpenFileName(filter="JSON file (*.json)")[0]
+		if filepath == "":
+			return
+		try:
+			responseData = requests.post("http://127.0.0.1:5000/setup", params={"path":filepath})
+			print(responseData)
+		except requests.ConnectionError as e:
+			msg = QMessageBox(QMessageBox.Icon.Critical, "Failed to run topology", f"Failed to run topology, verify if NIEP (not GUI) is running.")
+			msg.exec()
+
+	def killTopology(self):
+		import requests
+		try:
+			responseData = requests.post("http://127.0.0.1:5000/kill", params={})
+			print(responseData)
+		except requests.ConnectionError:
+			msg = QMessageBox(QMessageBox.Icon.Critical, "Failed to kill topology", f"Failed to kill topology, verify if NIEP (not GUI) is running.")
+			msg.exec()
+
 
 	def exportDir(self):
 		import json
@@ -470,20 +483,8 @@ class ElementViewer(QWidget):
 
 		layout = self.layout()
 
-		ifaceKeyValidatorRegexTable = {
-			"IP": regexdef.ipv4,
-			"MAC": regexdef.mac
-		}
-		for i, interface in enumerate(nodeInfo["INTERFACES"]):
-			ilabel = QLabel(f"Interface {i+1}:")
-			layout.addWidget(ilabel)
-			for k in interface.keys():
-				layout.addWidget(ElementLineEditor(interface, k, ifaceKeyValidatorRegexTable[k]))
-		
-		newInterfaceButton = QPushButton(QIcon(":add.png"), "")
-		newInterfaceButton.setToolTip("Add new interface")
-		newInterfaceButton.clicked.connect(self.addInterface)
-		layout.addWidget(newInterfaceButton)
+		iviewer = InterfaceViewer(node)
+		layout.addWidget(iviewer)
 	
 	def setSwitch(self, node: Node):
 		pass
@@ -516,21 +517,16 @@ class ElementViewer(QWidget):
 		layout.addWidget(diskEditor)
 		layout.addWidget(managementMACEditor)
 
-		for i, interface in enumerate(nodeInfo["INTERFACES"]):
-			ilabel = QLabel(f"Interface {i+1}:")
-			layout.addWidget(ilabel)
-			for k in interface.keys():
-				layout.addWidget(ElementLineEditor(interface, k))
-
-		
-	
+		ifaceviewer = InterfaceViewer(node)
+		layout.addWidget(ifaceviewer)
+			
 	def addInterface(self):
 		node: Node = self.element
 		iface = {"IP": None, "MAC": "00:00:00:00:00:00"}
 		node.nodeInfo["INTERFACES"].append(iface)
 		inum = len(node.nodeInfo["INTERFACES"])
 		layout = self.layout()
-		ilabel = QLabel(f"Interface {inum}:")
+		ilabel = InterfaceLabel(node, inum-1)
 		button = layout.itemAt(layout.count()-1).widget()
 		layout.removeWidget(button)
 		layout.addWidget(ilabel)
@@ -654,6 +650,23 @@ class CheckBoxKeyEditor(QCheckBox):
 		self.modDict[self.modKey] = self.isChecked() != self.negate
 
 
+class InterfaceLabel(QWidget):
+	def __init__(self, node: Node, ifaceidx: int):
+		super(InterfaceLabel, self).__init__()
+		layout = QHBoxLayout()
+		self.node = node
+		self.ifidx = ifaceidx
+		self.deleteBtn : QPushButton | None = None
+		label = QLabel(f"Interface {ifaceidx+1}")
+		layout.addWidget(label)
+		if ifaceidx > 0:
+			deleteBtn = QPushButton("Delete IFACE")
+			deleteBtn.clicked.connect(lambda: (self.node.removeInterface(self.ifidx)))
+			layout.addWidget(deleteBtn)
+			self.deleteBtn = deleteBtn
+		self.setLayout(layout)
+
+
 class InterfaceComboSelector(QComboBox):
 	def __init__(self, node: Node, edge: Edge):
 		super(InterfaceComboSelector, self).__init__()
@@ -664,6 +677,59 @@ class InterfaceComboSelector(QComboBox):
 			self.addItem(f"{j} - {ni[j-1]['MAC']}")
 		self.setCurrentIndex(edge.getNodeInterfaceIndex(node))
 		self.currentIndexChanged.connect(lambda: self.edge.updateNodeInterface(self.node, self.currentIndex()))
+
+
+class InterfaceViewer(QWidget):
+	def __init__(self, node : Node):
+		super(InterfaceViewer, self).__init__()
+		self.node = node
+
+		layout = QVBoxLayout()
+		self.setLayout(layout)
+		self.updateInterfaces()
+	
+	def updateInterfaces(self):
+		node = self.node
+		nodeInfo = node.nodeInfo
+		layout = self.layout()
+		clearLayout(layout)
+		ifaceKeyValidatorRegexTable = {
+			"IP": regexdef.ipv4, # Host
+			"MAC": regexdef.mac, # VM, Host
+			"ID": regexdef.defaultNaming, #VM
+			"LINK_MAC": regexdef.mac # VM
+		}
+		for i, interface in enumerate(nodeInfo["INTERFACES"]):
+			ilabel = self.createIfaceLabel(node, i)
+			layout.addWidget(ilabel)
+			for k in interface.keys():
+				layout.addWidget(ElementLineEditor(interface, k, ifaceKeyValidatorRegexTable[k]))
+
+		newInterfaceButton = QPushButton(QIcon(":add.png"), "")
+		newInterfaceButton.setToolTip("Add new interface")
+		newInterfaceButton.clicked.connect(self.addInterface)
+		layout.addWidget(newInterfaceButton)
+	
+	def addInterface(self):
+		node: Node = self.node
+		iface = {"IP": None, "MAC": "00:00:00:00:00:00"} if node.type == "Host" else {"ID": "", "MAC": "00:00:00:00:00:00", "LINK_MAC": ""}
+		node.nodeInfo["INTERFACES"].append(iface)
+		inum = len(node.nodeInfo["INTERFACES"])
+		layout : QVBoxLayout = self.layout()
+		ilabel = self.createIfaceLabel(node, inum-1)
+		button = layout.itemAt(layout.count()-1).widget()
+		layout.removeWidget(button)
+		layout.addWidget(ilabel)
+		for k in iface.keys():
+			layout.addWidget(ElementLineEditor(iface, k))
+		layout.addWidget(button)
+
+	def createIfaceLabel(self, node: Node, idx: int):
+		ilabel = InterfaceLabel(node, idx)
+		ideletebtn = ilabel.deleteBtn
+		if (ideletebtn is not None):
+			ideletebtn.clicked.connect(self.updateInterfaces)
+		return ilabel
 
 
 class VMDiskEditor(QWidget):
@@ -1044,6 +1110,14 @@ class Node(QGraphicsEllipseItem):
 			if other.type == "Controller":
 				return e
 		return None
+	
+	def removeInterface(self, ifaceidx):
+		# Update the interfaces used by the connections of the node
+		for e in self.edges:
+			eifaceidx = e.getNodeInterfaceIndex(self)
+			if e.edgeInfo["INTERFACES"][eifaceidx] >= ifaceidx:
+				e.edgeInfo["INTERFACES"][eifaceidx] -= 1
+		self.nodeInfo["INTERFACES"].pop(ifaceidx) # Remove the interface from the nodeinfo dict
 
 
 	
