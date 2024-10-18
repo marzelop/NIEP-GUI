@@ -426,14 +426,11 @@ class EditMenu(QWidget):
 	def __init__(self):
 		super(EditMenu, self).__init__()
 		layout = QVBoxLayout()
-		self.options = QListWidget()
+		# self.options = QListWidget()
 		self.elementViewer = ElementViewer()
 		self.creationOptions = CreationOptions()
 		self.scene: SceneClass | None = None
-		QListWidgetItem("test1", self.options)
-		QListWidgetItem("test2", self.options)
-		QListWidgetItem("test3", self.options)
-		layout.addWidget(self.options)
+		# layout.addWidget(self.options)
 		layout.addWidget(self.creationOptions)
 		layout.addWidget(self.elementViewer.scroll)
 		self.setMinimumWidth(200)
