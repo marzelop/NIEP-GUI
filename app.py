@@ -70,6 +70,7 @@ class WindowClass(QMainWindow):
 		self.editToolbar = self.createEditToolBar()
 		self.addToolBar(self.editToolbar)
 		self.filepath = ""
+		self.setToolMode(ToolMode.SELECT)
 
 		self.setMenuBar(self.menu)
 		self.setCentralWidget(self.mainWidget)
@@ -119,22 +120,39 @@ class WindowClass(QMainWindow):
 		toolbar = QToolBar("Edit")
 		FUNCTION = 0
 		ICON_PATH = 1
+		SHORTCUT = 2
 		actions = {
-			"&Select": (lambda: self.setToolMode(ToolMode.SELECT), ":cursor.png"),
-			"&Move": (lambda: self.setToolMode(ToolMode.MOVE), ":palm-of-hand.png"),
-			"&Connect": (lambda: self.setToolMode(ToolMode.CONNECT), ":line.png"),
-			"&New": (lambda: self.setToolMode(ToolMode.NEW), ":add.png"),
-			"&Delete": (lambda: self.setToolMode(ToolMode.DELETE), ":trash.png")
+			"&Select": (lambda: self.setToolMode(ToolMode.SELECT), ":cursor.png", "S"),
+			# "&Move": (lambda: self.setToolMode(ToolMode.MOVE), ":palm-of-hand.png"),
+			"&Connect": (lambda: self.setToolMode(ToolMode.CONNECT), ":line.png", "C"),
+			"&New": (lambda: self.setToolMode(ToolMode.NEW), ":add.png", "A"),
+			"&Delete": (lambda: self.setToolMode(ToolMode.DELETE), ":trash.png", "D")
 		}
 		for action in actions.keys():
 			self.editActions.append(QAction(QIcon(actions[action][ICON_PATH]), action))
-			self.editActions[-1].triggered.connect(actions[action][FUNCTION]) 
+			self.editActions[-1].triggered.connect(actions[action][FUNCTION])
+			actionShortcut = QKeySequence(actions[action][SHORTCUT])
+			self.editActions[-1].setShortcut(actionShortcut)
+			self.editActions[-1].setCheckable(True)
 
 		toolbar.addActions(self.editActions)
 		return toolbar
 	
+	def getCurrentToolMode(self):
+		return self.view.scene.toolMode
+	
+	def getToolModeButton(self, toolMode: ToolMode):
+		if toolMode.value > ToolMode.MOVE.value: # Removed MOVE button
+			return self.editActions[toolMode.value - 2]
+		return self.editActions[toolMode.value - 1]
+	
+	def getCurrentToolModeButton(self):
+		return self.getToolModeButton(self.getCurrentToolMode())
+
 	def setToolMode(self, toolMode: ToolMode) -> None:
+		self.getCurrentToolModeButton().setChecked(False)
 		self.view.scene.setToolMode(toolMode)
+		self.getCurrentToolModeButton().setChecked(True)
 
 	def export(self, format: str):
 		exportFunctions = {
@@ -269,7 +287,6 @@ class WindowClass(QMainWindow):
 		except requests.ConnectionError:
 			msg = QMessageBox(QMessageBox.Icon.Critical, "Failed to kill topology", f"Failed to kill topology, verify if NIEP (not GUI) is running.")
 			msg.exec()
-
 
 	def exportDir(self):
 		import json
@@ -793,7 +810,7 @@ class ViewClass(QGraphicsView):
 
 		self.setDragMode(QGraphicsView.RubberBandDrag)
 
-		self.scene = SceneClass(editMenu)
+		self.scene : SceneClass = SceneClass(editMenu)
 		self.setScene(self.scene)
 		self.setRenderHint(QPainter.Antialiasing)
 	
