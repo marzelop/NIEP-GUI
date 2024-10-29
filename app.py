@@ -14,7 +14,7 @@ import sys
 import file_export
 import copy
 from webbrowser import open as webopen
-from socket import inet_ntoa
+from socket import inet_ntoa, inet_aton
 import regexdef
 import os
 
@@ -62,7 +62,7 @@ def initializeUserSettings():
 class WindowClass(QMainWindow):
 	def __init__(self):
 		super(WindowClass, self).__init__()
-		self.setWindowTitle("NIEP GUI")
+		self.setWindowTitle("NIEP eXperience")
 		self.mainWidget = MainWidget()
 		self.editMenu = self.mainWidget.editMenu
 		self.view = self.mainWidget.view
@@ -71,10 +71,11 @@ class WindowClass(QMainWindow):
 		self.addToolBar(self.editToolbar)
 		self.filepath = ""
 		self.setToolMode(ToolMode.SELECT)
+		self.niep = ["127.0.0.1", "5000"]
 
 		self.setMenuBar(self.menu)
 		self.setCentralWidget(self.mainWidget)
-	
+
 	def createMenuBar(self) -> QMenuBar:
 		menuBar = QMenuBar()
 		menus = {
@@ -91,6 +92,7 @@ class WindowClass(QMainWindow):
 				"Troubleshooting": (None, None)
 			},
 			"&Run": {
+				"Configure NIEP": (self.configureNiep, "Ctrl+N"),
 				"Run topology": (self.runTopology, "Ctrl+R"),
 				"Kill topology": (self.killTopology, "Ctrl+K")
 			}
@@ -267,13 +269,39 @@ class WindowClass(QMainWindow):
 			scene.connectNodes(uobj, vobj, edgeInfo)
 		self.filepath = filepath
 
+	def configureNiep(self):
+		
+		recvIp, recvOk = QInputDialog.getText(self, "Configure NIEP", "Enter NIEP IP: ", text=self.niep[0])
+		if recvOk:
+			try:
+				inet_aton(recvIp)
+			except Exception as e:
+				QMessageBox.critical(None, "Invalid IP", "Invalid IP provided!")
+				return
+			if len(recvIp.split(".")) != 4:
+				QMessageBox.critical(None, "Invalid IP", "Invalid IP provided!")
+				return
+			self.niep[0] = recvIp
+
+		recvPort, recvOk = QInputDialog.getText(self, "Configure NIEP", "Enter NIEP Port: ", text=self.niep[1])
+		if recvOk:
+			try:
+				recvPort = int(recvPort)
+			except:
+				QMessageBox.critical(None, "Invalid Port", "Invalid port provided!")
+				return
+			if recvPort < 0 or recvPort > 65535:
+				QMessageBox.critical(None, "Invalid Port", "Invalid port provided!")
+				return
+			self.niep[1] = recvPort
+
 	def runTopology(self):
 		import requests
 		filepath = QFileDialog.getOpenFileName(filter="JSON file (*.json)")[0]
 		if filepath == "":
 			return
 		try:
-			responseData = requests.post("http://127.0.0.1:5000/setup", params={"path":filepath})
+			responseData = requests.post("http://" + self.niep[0] + ":" + self.niep[1] + "/setup", params={"path":filepath})
 			print(responseData)
 		except requests.ConnectionError as e:
 			msg = QMessageBox(QMessageBox.Icon.Critical, "Failed to run topology", f"Failed to run topology, verify if NIEP (not GUI) is running.")
@@ -282,7 +310,7 @@ class WindowClass(QMainWindow):
 	def killTopology(self):
 		import requests
 		try:
-			responseData = requests.post("http://127.0.0.1:5000/kill", params={})
+			responseData = requests.post("http://" + self.niep[0] + ":" + self.niep[1] + "/kill", params={})
 			print(responseData)
 		except requests.ConnectionError:
 			msg = QMessageBox(QMessageBox.Icon.Critical, "Failed to kill topology", f"Failed to kill topology, verify if NIEP (not GUI) is running.")
@@ -1193,10 +1221,10 @@ class Edge(QGraphicsLineItem):
 if __name__ == "__main__":
 	app = QApplication()
 	app.setOrganizationName("NIEP")
-	app.setApplicationName("GUI")
-	app.setApplicationDisplayName("NIEP-GUI")
+	app.setApplicationName("NIEPx")
+	app.setApplicationDisplayName("NIEP eXperience")
 
-	userSettings = QSettings("NIEP", "GUI")
+	userSettings = QSettings("NIEP", "x")
 	initializeUserSettings()
 	window = WindowClass()
 	window.show()
