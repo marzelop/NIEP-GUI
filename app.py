@@ -1224,7 +1224,7 @@ if __name__ == "__main__":
 	app.setApplicationName("NIEPx")
 	app.setApplicationDisplayName("NIEP eXperience")
 
-	userSettings = QSettings("NIEP", "x")
+	userSettings = QSettings("NIEP", "NIEPx")
 	initializeUserSettings()
 	window = WindowClass()
 	window.show()
