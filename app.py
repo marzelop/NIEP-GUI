@@ -93,7 +93,8 @@ class WindowClass(QMainWindow):
 			},
 			"&Run": {
 				"Configure NIEP": (self.configureNiep, "Ctrl+N"),
-				"Run topology": (self.runTopology, "Ctrl+R"),
+				"Run topology (local)": (self.runTopology, "Ctrl+R"),
+				"Run topology (remote)": (self.runRemote, "Ctrl+Shift+R"),
 				"Kill topology": (self.killTopology, "Ctrl+K")
 			}
 		}
@@ -271,29 +272,48 @@ class WindowClass(QMainWindow):
 
 	def configureNiep(self):
 		
-		recvIp, recvOk = QInputDialog.getText(self, "Configure NIEP", "Enter NIEP IP: ", text=self.niep[0])
-		if recvOk:
-			try:
-				inet_aton(recvIp)
-			except Exception as e:
-				QMessageBox.critical(None, "Invalid IP", "Invalid IP provided!")
-				return
-			if len(recvIp.split(".")) != 4:
-				QMessageBox.critical(None, "Invalid IP", "Invalid IP provided!")
-				return
-			self.niep[0] = recvIp
+		try:
+			recvIp, recvOk = QInputDialog.getText(self, "Configure NIEP", "Enter NIEP IP: ", text=self.niep[0])
+			if recvOk:
+				try:
+					inet_aton(recvIp)
+				except Exception as e:
+					QMessageBox.critical(None, "Invalid IP", "Invalid IP provided!")
+					return
+				if len(recvIp.split(".")) != 4:
+					QMessageBox.critical(None, "Invalid IP", "Invalid IP provided!")
+					return
+				self.niep[0] = recvIp
+		except Exception as e:
+			pass
 
-		recvPort, recvOk = QInputDialog.getText(self, "Configure NIEP", "Enter NIEP Port: ", text=self.niep[1])
-		if recvOk:
-			try:
-				recvPort = int(recvPort)
-			except:
-				QMessageBox.critical(None, "Invalid Port", "Invalid port provided!")
-				return
-			if recvPort < 0 or recvPort > 65535:
-				QMessageBox.critical(None, "Invalid Port", "Invalid port provided!")
-				return
-			self.niep[1] = recvPort
+		try:
+			recvPort, recvOk = QInputDialog.getText(self, "Configure NIEP", "Enter NIEP Port: ", text=self.niep[1])
+			if recvOk:
+				try:
+					recvPort = int(recvPort)
+				except:
+					QMessageBox.critical(None, "Invalid Port", "Invalid port provided!")
+					return
+				if recvPort < 0 or recvPort > 65535:
+					QMessageBox.critical(None, "Invalid Port", "Invalid port provided!")
+					return
+				self.niep[1] = str(recvPort)
+		except Exception as e:
+			pass
+
+	def runRemote(self):
+		import requests
+		filepath = QFileDialog.getOpenFileName(filter="Zip file (*.zip)")[0]
+		if filepath == "":
+			return
+		try:
+			with open(filepath, 'rb') as f:
+				responseData = requests.post("http://" + self.niep[0] + ":" + self.niep[1] + "/remote", files={'package': f})
+				print(responseData)
+		except requests.ConnectionError as e:
+			msg = QMessageBox(QMessageBox.Icon.Critical, "Failed to run topology", f"Failed to run topology, verify if the remote NIEP HTTP server is running.")
+			msg.exec()
 
 	def runTopology(self):
 		import requests
@@ -304,7 +324,7 @@ class WindowClass(QMainWindow):
 			responseData = requests.post("http://" + self.niep[0] + ":" + self.niep[1] + "/setup", params={"path":filepath})
 			print(responseData)
 		except requests.ConnectionError as e:
-			msg = QMessageBox(QMessageBox.Icon.Critical, "Failed to run topology", f"Failed to run topology, verify if NIEP (not GUI) is running.")
+			msg = QMessageBox(QMessageBox.Icon.Critical, "Failed to run topology", f"Failed to run topology, verify if the local NIEP HTTP server is running.")
 			msg.exec()
 
 	def killTopology(self):
@@ -313,7 +333,7 @@ class WindowClass(QMainWindow):
 			responseData = requests.post("http://" + self.niep[0] + ":" + self.niep[1] + "/kill", params={})
 			print(responseData)
 		except requests.ConnectionError:
-			msg = QMessageBox(QMessageBox.Icon.Critical, "Failed to kill topology", f"Failed to kill topology, verify if NIEP (not GUI) is running.")
+			msg = QMessageBox(QMessageBox.Icon.Critical, "Failed to kill topology", f"Failed to kill topology, verify if NIEP HTTP server is running.")
 			msg.exec()
 
 	def exportDir(self):
